@@ -25,7 +25,7 @@
             background: white;
             border: 1px solid #000;
             padding: 20px;
-            max-width: 1200px;
+            max-width: 1400px;
             width: 100%;
         }
 
@@ -57,7 +57,21 @@
         .config-inputs {
             display: flex;
             gap: 8px;
-            max-width: 420px;
+            flex-wrap: wrap;
+        }
+
+        .config-inputs > div {
+            flex: 1;
+            min-width: 250px;
+        }
+
+        .config-inputs > div:first-child,
+        .config-inputs > div:nth-child(2) {
+            min-width: 200px;
+        }
+
+        .model-select-container {
+            min-width: 400px;
         }
 
         .cost-inputs {
@@ -67,10 +81,6 @@
         }
 
         .cost-inputs > div {
-            flex: 1;
-        }
-
-        .config-inputs > div {
             flex: 1;
         }
 
@@ -118,7 +128,7 @@
             margin-bottom: 10px;
         }
 
-        input, select, textarea {
+        input, select {
             flex: 1;
             padding: 6px 8px;
             border: 1px solid #000;
@@ -131,12 +141,7 @@
             width: 100%;
         }
 
-        textarea {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
-            resize: vertical;
-        }
-
-        input:focus, select:focus, textarea:focus {
+        input:focus, select:focus {
             outline: none;
             background: #f5f5f5;
         }
@@ -194,7 +199,7 @@
 
         .results-grid {
             display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
             gap: 10px;
             margin-top: 10px;
         }
@@ -224,13 +229,14 @@
             margin-top: 10px;
             padding-top: 10px;
             border-top: 1px solid #000;
-            font-size: 10px;
+            font-size: 9px;
             color: #000;
             text-align: left;
+            line-height: 1.4;
         }
 
         .result-breakdown div {
-            margin: 3px 0;
+            margin: 2px 0;
         }
 
         .error {
@@ -313,7 +319,7 @@
 <body>
     <div class="calculator">
         <h1>Inference Cost Calculator</h1>
-        <p class="subtitle">Calculate per-request inference costs</p>
+        <p class="subtitle">Calculate per-request inference costs with cache-aware pricing</p>
 
         <div class="config-section">
             <div class="section-title">Shared Configuration</div>
@@ -326,7 +332,6 @@
                         value="107"
                         min="1"
                         step="1"
-                        required
                     >
                 </div>
                 <div>
@@ -337,15 +342,27 @@
                         value="3"
                         min="1"
                         step="1"
-                        required
                     >
+                </div>
+                <div class="model-select-container">
+                    <label class="label">Judge Model</label>
+                    <input
+                        type="text"
+                        id="judgeModelId"
+                        placeholder="Start typing model name..."
+                        value="deepseek/deepseek-r1-0528"
+                        list="judgeModelList"
+                        autocomplete="off"
+                        style="width: 100%;"
+                    >
+                    <datalist id="judgeModelList"></datalist>
                 </div>
             </div>
         </div>
 
         <div class="sections-row">
             <div class="section">
-                <div class="section-title">Option 1: Select Model</div>
+                <div class="section-title">Option 1: Select Model(s)</div>
                 <label class="label">
                     <input type="checkbox" id="multiModelMode" onchange="toggleMultiModelMode()">
                     Multiple models (sum costs)
@@ -369,7 +386,7 @@
                         <input
                             type="text"
                             id="multiModelInput_field"
-                            placeholder="Start typing model name..."
+                            placeholder="Type or paste model IDs (comma/space/newline separated)..."
                             list="modelList"
                             autocomplete="off"
                             style="flex: 1;"
@@ -393,10 +410,7 @@
                             type="number"
                             id="inputCost"
                             placeholder="e.g., 2.50"
-                            value="2.50"
-                            min="0.01"
                             step="0.01"
-                            required
                         >
                     </div>
                     <div style="flex: 1;">
@@ -405,10 +419,7 @@
                             type="number"
                             id="outputCost"
                             placeholder="e.g., 10.00"
-                            value="10.00"
-                            min="0.01"
                             step="0.01"
-                            required
                         >
                     </div>
                 </div>
@@ -419,48 +430,73 @@
         <div id="result"></div>
     </div>
 
+    <script src="model_pricing_data.js"></script>
     <script>
-        // Cached OpenRouter models data
-        const MODELS_CACHE = {"kwaipilot/kat-coder-pro:free": {"name": "Kwaipilot: KAT-Coder-Pro V1 (free)", "prompt": "0", "completion": "0"}, "moonshotai/kimi-linear-48b-a3b-instruct": {"name": "MoonshotAI: Kimi Linear 48B A3B Instruct", "prompt": "0.0000003", "completion": "0.0000006"}, "openrouter/polaris-alpha": {"name": "Polaris Alpha", "prompt": "0", "completion": "0"}, "moonshotai/kimi-k2-thinking": {"name": "MoonshotAI: Kimi K2 Thinking", "prompt": "0.00000055", "completion": "0.00000225"}, "amazon/nova-premier-v1": {"name": "Amazon: Nova Premier 1.0", "prompt": "0.0000025", "completion": "0.0000125"}, "perplexity/sonar-pro-search": {"name": "Perplexity: Sonar Pro Search", "prompt": "0.000003", "completion": "0.000015"}, "mistralai/voxtral-small-24b-2507": {"name": "Mistral: Voxtral Small 24B 2507", "prompt": "0.0000001", "completion": "0.0000003"}, "openai/gpt-oss-safeguard-20b": {"name": "OpenAI: gpt-oss-safeguard-20b", "prompt": "0.000000075", "completion": "0.0000003"}, "nvidia/nemotron-nano-12b-v2-vl:free": {"name": "NVIDIA: Nemotron Nano 12B 2 VL (free)", "prompt": "0", "completion": "0"}, "nvidia/nemotron-nano-12b-v2-vl": {"name": "NVIDIA: Nemotron Nano 12B 2 VL", "prompt": "0.0000002", "completion": "0.0000006"}, "minimax/minimax-m2": {"name": "MiniMax: MiniMax M2", "prompt": "0.000000255", "completion": "0.00000102"}, "liquid/lfm2-8b-a1b": {"name": "LiquidAI/LFM2-8B-A1B", "prompt": "0.00000005", "completion": "0.0000001"}, "liquid/lfm-2.2-6b": {"name": "LiquidAI/LFM2-2.6B", "prompt": "0.00000005", "completion": "0.0000001"}, "ibm-granite/granite-4.0-h-micro": {"name": "IBM: Granite 4.0 Micro", "prompt": "0.000000017", "completion": "0.00000011"}, "deepcogito/cogito-v2-preview-llama-405b": {"name": "Deep Cogito: Cogito V2 Preview Llama 405B", "prompt": "0.0000035", "completion": "0.0000035"}, "openai/gpt-5-image-mini": {"name": "OpenAI: GPT-5 Image Mini", "prompt": "0.0000025", "completion": "0.000002"}, "anthropic/claude-haiku-4.5": {"name": "Anthropic: Claude Haiku 4.5", "prompt": "0.000001", "completion": "0.000005"}, "qwen/qwen3-vl-8b-thinking": {"name": "Qwen: Qwen3 VL 8B Thinking", "prompt": "0.00000018", "completion": "0.0000021"}, "qwen/qwen3-vl-8b-instruct": {"name": "Qwen: Qwen3 VL 8B Instruct", "prompt": "0.00000008", "completion": "0.0000005"}, "openai/gpt-5-image": {"name": "OpenAI: GPT-5 Image", "prompt": "0.00001", "completion": "0.00001"}, "inclusionai/ring-1t": {"name": "inclusionAI: Ring 1T", "prompt": "0.00000057", "completion": "0.00000228"}, "inclusionai/ling-1t": {"name": "inclusionAI: Ling-1T", "prompt": "0.00000057", "completion": "0.00000228"}, "openai/o3-deep-research": {"name": "OpenAI: o3 Deep Research", "prompt": "0.00001", "completion": "0.00004"}, "openai/o4-mini-deep-research": {"name": "OpenAI: o4 Mini Deep Research", "prompt": "0.000002", "completion": "0.000008"}, "nvidia/llama-3.3-nemotron-super-49b-v1.5": {"name": "NVIDIA: Llama 3.3 Nemotron Super 49B V1.5", "prompt": "0.0000001", "completion": "0.0000004"}, "baidu/ernie-4.5-21b-a3b-thinking": {"name": "Baidu: ERNIE 4.5 21B A3B Thinking", "prompt": "0.00000007", "completion": "0.00000028"}, "google/gemini-2.5-flash-image": {"name": "Google: Gemini 2.5 Flash Image (Nano Banana)", "prompt": "0.0000003", "completion": "0.0000025"}, "qwen/qwen3-vl-30b-a3b-thinking": {"name": "Qwen: Qwen3 VL 30B A3B Thinking", "prompt": "0.0000002", "completion": "0.000001"}, "qwen/qwen3-vl-30b-a3b-instruct": {"name": "Qwen: Qwen3 VL 30B A3B Instruct", "prompt": "0.00000015", "completion": "0.0000006"}, "openai/gpt-5-pro": {"name": "OpenAI: GPT-5 Pro", "prompt": "0.000015", "completion": "0.00012"}, "z-ai/glm-4.6": {"name": "Z.AI: GLM 4.6", "prompt": "0.0000004", "completion": "0.00000175"}, "z-ai/glm-4.6:exacto": {"name": "Z.AI: GLM 4.6 (exacto)", "prompt": "0.00000045", "completion": "0.0000019"}, "anthropic/claude-sonnet-4.5": {"name": "Anthropic: Claude Sonnet 4.5", "prompt": "0.000003", "completion": "0.000015"}, "deepseek/deepseek-v3.2-exp": {"name": "DeepSeek: DeepSeek V3.2 Exp", "prompt": "0.00000027", "completion": "0.0000004"}, "thedrummer/cydonia-24b-v4.1": {"name": "TheDrummer: Cydonia 24B V4.1", "prompt": "0.0000003", "completion": "0.0000005"}, "relace/relace-apply-3": {"name": "Relace: Relace Apply 3", "prompt": "0.00000085", "completion": "0.00000125"}, "google/gemini-2.5-flash-preview-09-2025": {"name": "Google: Gemini 2.5 Flash Preview 09-2025", "prompt": "0.0000003", "completion": "0.0000025"}, "google/gemini-2.5-flash-lite-preview-09-2025": {"name": "Google: Gemini 2.5 Flash Lite Preview 09-2025", "prompt": "0.0000001", "completion": "0.0000004"}, "qwen/qwen3-vl-235b-a22b-thinking": {"name": "Qwen: Qwen3 VL 235B A22B Thinking", "prompt": "0.0000003", "completion": "0.0000012"}, "qwen/qwen3-vl-235b-a22b-instruct": {"name": "Qwen: Qwen3 VL 235B A22B Instruct", "prompt": "0.00000022", "completion": "0.00000088"}, "qwen/qwen3-max": {"name": "Qwen: Qwen3 Max", "prompt": "0.0000012", "completion": "0.000006"}, "qwen/qwen3-coder-plus": {"name": "Qwen: Qwen3 Coder Plus", "prompt": "0.000001", "completion": "0.000005"}, "openai/gpt-5-codex": {"name": "OpenAI: GPT-5 Codex", "prompt": "0.00000125", "completion": "0.00001"}, "deepseek/deepseek-v3.1-terminus": {"name": "DeepSeek: DeepSeek V3.1 Terminus", "prompt": "0.00000023", "completion": "0.0000009"}, "deepseek/deepseek-v3.1-terminus:exacto": {"name": "DeepSeek: DeepSeek V3.1 Terminus (exacto)", "prompt": "0.00000027", "completion": "0.000001"}, "x-ai/grok-4-fast": {"name": "xAI: Grok 4 Fast", "prompt": "0.0000002", "completion": "0.0000005"}, "alibaba/tongyi-deepresearch-30b-a3b:free": {"name": "Tongyi DeepResearch 30B A3B (free)", "prompt": "0", "completion": "0"}, "alibaba/tongyi-deepresearch-30b-a3b": {"name": "Tongyi DeepResearch 30B A3B", "prompt": "0.00000009", "completion": "0.0000004"}, "qwen/qwen3-coder-flash": {"name": "Qwen: Qwen3 Coder Flash", "prompt": "0.0000003", "completion": "0.0000015"}, "arcee-ai/afm-4.5b": {"name": "Arcee AI: AFM 4.5B", "prompt": "0.000000048", "completion": "0.00000015"}, "opengvlab/internvl3-78b": {"name": "OpenGVLab: InternVL3 78B", "prompt": "0.00000007", "completion": "0.00000026"}, "qwen/qwen3-next-80b-a3b-thinking": {"name": "Qwen: Qwen3 Next 80B A3B Thinking", "prompt": "0.00000015", "completion": "0.0000012"}, "qwen/qwen3-next-80b-a3b-instruct": {"name": "Qwen: Qwen3 Next 80B A3B Instruct", "prompt": "0.0000001", "completion": "0.0000008"}, "meituan/longcat-flash-chat:free": {"name": "Meituan: LongCat Flash Chat (free)", "prompt": "0", "completion": "0"}, "meituan/longcat-flash-chat": {"name": "Meituan: LongCat Flash Chat", "prompt": "0.00000015", "completion": "0.00000075"}, "qwen/qwen-plus-2025-07-28": {"name": "Qwen: Qwen Plus 0728", "prompt": "0.0000004", "completion": "0.0000012"}, "qwen/qwen-plus-2025-07-28:thinking": {"name": "Qwen: Qwen Plus 0728 (thinking)", "prompt": "0.0000004", "completion": "0.000004"}, "nvidia/nemotron-nano-9b-v2:free": {"name": "NVIDIA: Nemotron Nano 9B V2 (free)", "prompt": "0", "completion": "0"}, "nvidia/nemotron-nano-9b-v2": {"name": "NVIDIA: Nemotron Nano 9B V2", "prompt": "0.00000004", "completion": "0.00000016"}, "moonshotai/kimi-k2-0905": {"name": "MoonshotAI: Kimi K2 0905", "prompt": "0.00000039", "completion": "0.0000019"}, "moonshotai/kimi-k2-0905:exacto": {"name": "MoonshotAI: Kimi K2 0905 (exacto)", "prompt": "0.0000006", "completion": "0.0000025"}, "deepcogito/cogito-v2-preview-llama-70b": {"name": "Deep Cogito: Cogito V2 Preview Llama 70B", "prompt": "0.00000088", "completion": "0.00000088"}, "deepcogito/cogito-v2-preview-llama-109b-moe": {"name": "Cogito V2 Preview Llama 109B", "prompt": "0.00000018", "completion": "0.00000059"}, "deepcogito/cogito-v2-preview-deepseek-671b": {"name": "Deep Cogito: Cogito V2 Preview Deepseek 671B", "prompt": "0.00000125", "completion": "0.00000125"}, "stepfun-ai/step3": {"name": "StepFun: Step3", "prompt": "0.00000057", "completion": "0.00000142"}, "qwen/qwen3-30b-a3b-thinking-2507": {"name": "Qwen: Qwen3 30B A3B Thinking 2507", "prompt": "0.00000009", "completion": "0.0000003"}, "x-ai/grok-code-fast-1": {"name": "xAI: Grok Code Fast 1", "prompt": "0.0000002", "completion": "0.0000015"}, "nousresearch/hermes-4-70b": {"name": "Nous: Hermes 4 70B", "prompt": "0.00000011", "completion": "0.00000038"}, "nousresearch/hermes-4-405b": {"name": "Nous: Hermes 4 405B", "prompt": "0.0000003", "completion": "0.0000012"}, "google/gemini-2.5-flash-image-preview": {"name": "Google: Gemini 2.5 Flash Image Preview (Nano Banana)", "prompt": "0.0000003", "completion": "0.0000025"}, "deepseek/deepseek-chat-v3.1:free": {"name": "DeepSeek: DeepSeek V3.1 (free)", "prompt": "0", "completion": "0"}, "deepseek/deepseek-chat-v3.1": {"name": "DeepSeek: DeepSeek V3.1", "prompt": "0.0000002", "completion": "0.0000008"}, "openai/gpt-4o-audio-preview": {"name": "OpenAI: GPT-4o Audio", "prompt": "0.0000025", "completion": "0.00001"}, "mistralai/mistral-medium-3.1": {"name": "Mistral: Mistral Medium 3.1", "prompt": "0.0000004", "completion": "0.000002"}, "baidu/ernie-4.5-21b-a3b": {"name": "Baidu: ERNIE 4.5 21B A3B", "prompt": "0.00000007", "completion": "0.00000028"}, "baidu/ernie-4.5-vl-28b-a3b": {"name": "Baidu: ERNIE 4.5 VL 28B A3B", "prompt": "0.00000014", "completion": "0.00000056"}, "z-ai/glm-4.5v": {"name": "Z.AI: GLM 4.5V", "prompt": "0.0000006", "completion": "0.0000018"}, "ai21/jamba-mini-1.7": {"name": "AI21: Jamba Mini 1.7", "prompt": "0.0000002", "completion": "0.0000004"}, "ai21/jamba-large-1.7": {"name": "AI21: Jamba Large 1.7", "prompt": "0.000002", "completion": "0.000008"}, "openai/gpt-5-chat": {"name": "OpenAI: GPT-5 Chat", "prompt": "0.00000125", "completion": "0.00001"}, "openai/gpt-5": {"name": "OpenAI: GPT-5", "prompt": "0.00000125", "completion": "0.00001"}, "openai/gpt-5-mini": {"name": "OpenAI: GPT-5 Mini", "prompt": "0.00000025", "completion": "0.000002"}, "openai/gpt-5-nano": {"name": "OpenAI: GPT-5 Nano", "prompt": "0.00000005", "completion": "0.0000004"}, "openai/gpt-oss-120b": {"name": "OpenAI: gpt-oss-120b", "prompt": "0.00000004", "completion": "0.0000004"}, "openai/gpt-oss-120b:exacto": {"name": "OpenAI: gpt-oss-120b (exacto)", "prompt": "0.00000005", "completion": "0.00000024"}, "openai/gpt-oss-20b:free": {"name": "OpenAI: gpt-oss-20b (free)", "prompt": "0", "completion": "0"}, "openai/gpt-oss-20b": {"name": "OpenAI: gpt-oss-20b", "prompt": "0.00000003", "completion": "0.00000014"}, "anthropic/claude-opus-4.1": {"name": "Anthropic: Claude Opus 4.1", "prompt": "0.000015", "completion": "0.000075"}, "mistralai/codestral-2508": {"name": "Mistral: Codestral 2508", "prompt": "0.0000003", "completion": "0.0000009"}, "qwen/qwen3-coder-30b-a3b-instruct": {"name": "Qwen: Qwen3 Coder 30B A3B Instruct", "prompt": "0.00000006", "completion": "0.00000025"}, "qwen/qwen3-30b-a3b-instruct-2507": {"name": "Qwen: Qwen3 30B A3B Instruct 2507", "prompt": "0.00000008", "completion": "0.00000033"}, "z-ai/glm-4.5": {"name": "Z.AI: GLM 4.5", "prompt": "0.00000035", "completion": "0.00000155"}, "z-ai/glm-4.5-air:free": {"name": "Z.AI: GLM 4.5 Air (free)", "prompt": "0", "completion": "0"}, "z-ai/glm-4.5-air": {"name": "Z.AI: GLM 4.5 Air", "prompt": "0.00000013", "completion": "0.00000085"}, "qwen/qwen3-235b-a22b-thinking-2507": {"name": "Qwen: Qwen3 235B A22B Thinking 2507", "prompt": "0.00000011", "completion": "0.0000006"}, "z-ai/glm-4-32b": {"name": "Z.AI: GLM 4 32B ", "prompt": "0.0000001", "completion": "0.0000001"}, "qwen/qwen3-coder:free": {"name": "Qwen: Qwen3 Coder 480B A35B (free)", "prompt": "0", "completion": "0"}, "qwen/qwen3-coder": {"name": "Qwen: Qwen3 Coder 480B A35B", "prompt": "0.00000022", "completion": "0.00000095"}, "qwen/qwen3-coder:exacto": {"name": "Qwen: Qwen3 Coder 480B A35B (exacto)", "prompt": "0.00000038", "completion": "0.00000153"}, "bytedance/ui-tars-1.5-7b": {"name": "ByteDance: UI-TARS 7B ", "prompt": "0.0000001", "completion": "0.0000002"}, "google/gemini-2.5-flash-lite": {"name": "Google: Gemini 2.5 Flash Lite", "prompt": "0.0000001", "completion": "0.0000004"}, "qwen/qwen3-235b-a22b-2507": {"name": "Qwen: Qwen3 235B A22B Instruct 2507", "prompt": "0.00000008", "completion": "0.00000055"}, "switchpoint/router": {"name": "Switchpoint Router", "prompt": "0.00000085", "completion": "0.0000034"}, "moonshotai/kimi-k2:free": {"name": "MoonshotAI: Kimi K2 0711 (free)", "prompt": "0", "completion": "0"}, "moonshotai/kimi-k2": {"name": "MoonshotAI: Kimi K2 0711", "prompt": "0.0000005", "completion": "0.0000024"}, "thudm/glm-4.1v-9b-thinking": {"name": "THUDM: GLM 4.1V 9B Thinking", "prompt": "0.000000035", "completion": "0.000000138"}, "mistralai/devstral-medium": {"name": "Mistral: Devstral Medium", "prompt": "0.0000004", "completion": "0.000002"}, "mistralai/devstral-small": {"name": "Mistral: Devstral Small 1.1", "prompt": "0.00000007", "completion": "0.00000028"}, "cognitivecomputations/dolphin-mistral-24b-venice-edition:free": {"name": "Venice: Uncensored (free)", "prompt": "0", "completion": "0"}, "x-ai/grok-4": {"name": "xAI: Grok 4", "prompt": "0.000003", "completion": "0.000015"}, "google/gemma-3n-e2b-it:free": {"name": "Google: Gemma 3n 2B (free)", "prompt": "0", "completion": "0"}, "tencent/hunyuan-a13b-instruct": {"name": "Tencent: Hunyuan A13B Instruct", "prompt": "0.00000014", "completion": "0.00000057"}, "tngtech/deepseek-r1t2-chimera:free": {"name": "TNG: DeepSeek R1T2 Chimera (free)", "prompt": "0", "completion": "0"}, "tngtech/deepseek-r1t2-chimera": {"name": "TNG: DeepSeek R1T2 Chimera", "prompt": "0.0000003", "completion": "0.0000012"}, "morph/morph-v3-large": {"name": "Morph: Morph V3 Large", "prompt": "0.0000009", "completion": "0.0000019"}, "morph/morph-v3-fast": {"name": "Morph: Morph V3 Fast", "prompt": "0.0000008", "completion": "0.0000012"}, "baidu/ernie-4.5-vl-424b-a47b": {"name": "Baidu: ERNIE 4.5 VL 424B A47B ", "prompt": "0.00000042", "completion": "0.00000125"}, "baidu/ernie-4.5-300b-a47b": {"name": "Baidu: ERNIE 4.5 300B A47B ", "prompt": "0.00000028", "completion": "0.0000011"}, "thedrummer/anubis-70b-v1.1": {"name": "TheDrummer: Anubis 70B V1.1", "prompt": "0.00000065", "completion": "0.000001"}, "inception/mercury": {"name": "Inception: Mercury", "prompt": "0.00000025", "completion": "0.000001"}, "mistralai/mistral-small-3.2-24b-instruct:free": {"name": "Mistral: Mistral Small 3.2 24B (free)", "prompt": "0", "completion": "0"}, "mistralai/mistral-small-3.2-24b-instruct": {"name": "Mistral: Mistral Small 3.2 24B", "prompt": "0.00000006", "completion": "0.00000018"}, "minimax/minimax-m1": {"name": "MiniMax: MiniMax M1", "prompt": "0.0000004", "completion": "0.0000022"}, "google/gemini-2.5-flash-lite-preview-06-17": {"name": "Google: Gemini 2.5 Flash Lite Preview 06-17", "prompt": "0.0000001", "completion": "0.0000004"}, "google/gemini-2.5-flash": {"name": "Google: Gemini 2.5 Flash", "prompt": "0.0000003", "completion": "0.0000025"}, "google/gemini-2.5-pro": {"name": "Google: Gemini 2.5 Pro", "prompt": "0.00000125", "completion": "0.00001"}, "moonshotai/kimi-dev-72b": {"name": "MoonshotAI: Kimi Dev 72B", "prompt": "0.00000029", "completion": "0.00000115"}, "openai/o3-pro": {"name": "OpenAI: o3 Pro", "prompt": "0.00002", "completion": "0.00008"}, "x-ai/grok-3-mini": {"name": "xAI: Grok 3 Mini", "prompt": "0.0000003", "completion": "0.0000005"}, "x-ai/grok-3": {"name": "xAI: Grok 3", "prompt": "0.000003", "completion": "0.000015"}, "mistralai/magistral-small-2506": {"name": "Mistral: Magistral Small 2506", "prompt": "0.0000005", "completion": "0.0000015"}, "mistralai/magistral-medium-2506:thinking": {"name": "Mistral: Magistral Medium 2506 (thinking)", "prompt": "0.000002", "completion": "0.000005"}, "mistralai/magistral-medium-2506": {"name": "Mistral: Magistral Medium 2506", "prompt": "0.000002", "completion": "0.000005"}, "google/gemini-2.5-pro-preview": {"name": "Google: Gemini 2.5 Pro Preview 06-05", "prompt": "0.00000125", "completion": "0.00001"}, "deepseek/deepseek-r1-0528-qwen3-8b:free": {"name": "DeepSeek: DeepSeek R1 0528 Qwen3 8B (free)", "prompt": "0", "completion": "0"}, "deepseek/deepseek-r1-0528-qwen3-8b": {"name": "DeepSeek: DeepSeek R1 0528 Qwen3 8B", "prompt": "0.00000002", "completion": "0.0000001"}, "deepseek/deepseek-r1-0528:free": {"name": "DeepSeek: R1 0528 (free)", "prompt": "0", "completion": "0"}, "deepseek/deepseek-r1-0528": {"name": "DeepSeek: R1 0528", "prompt": "0.0000004", "completion": "0.00000175"}, "anthropic/claude-opus-4": {"name": "Anthropic: Claude Opus 4", "prompt": "0.000015", "completion": "0.000075"}, "anthropic/claude-sonnet-4": {"name": "Anthropic: Claude Sonnet 4", "prompt": "0.000003", "completion": "0.000015"}, "mistralai/devstral-small-2505": {"name": "Mistral: Devstral Small 2505", "prompt": "0.00000006", "completion": "0.00000012"}, "google/gemma-3n-e4b-it:free": {"name": "Google: Gemma 3n 4B (free)", "prompt": "0", "completion": "0"}, "google/gemma-3n-e4b-it": {"name": "Google: Gemma 3n 4B", "prompt": "0.00000002", "completion": "0.00000004"}, "openai/codex-mini": {"name": "OpenAI: Codex Mini", "prompt": "0.0000015", "completion": "0.000006"}, "meta-llama/llama-3.3-8b-instruct:free": {"name": "Meta: Llama 3.3 8B Instruct (free)", "prompt": "0", "completion": "0"}, "nousresearch/deephermes-3-mistral-24b-preview": {"name": "Nous: DeepHermes 3 Mistral 24B Preview", "prompt": "0.00000015", "completion": "0.00000059"}, "mistralai/mistral-medium-3": {"name": "Mistral: Mistral Medium 3", "prompt": "0.0000004", "completion": "0.000002"}, "google/gemini-2.5-pro-preview-05-06": {"name": "Google: Gemini 2.5 Pro Preview 05-06", "prompt": "0.00000125", "completion": "0.00001"}, "arcee-ai/spotlight": {"name": "Arcee AI: Spotlight", "prompt": "0.00000018", "completion": "0.00000018"}, "arcee-ai/maestro-reasoning": {"name": "Arcee AI: Maestro Reasoning", "prompt": "0.0000009", "completion": "0.0000033"}, "arcee-ai/virtuoso-large": {"name": "Arcee AI: Virtuoso Large", "prompt": "0.00000075", "completion": "0.0000012"}, "arcee-ai/coder-large": {"name": "Arcee AI: Coder Large", "prompt": "0.0000005", "completion": "0.0000008"}, "microsoft/phi-4-reasoning-plus": {"name": "Microsoft: Phi 4 Reasoning Plus", "prompt": "0.00000007", "completion": "0.00000035"}, "inception/mercury-coder": {"name": "Inception: Mercury Coder", "prompt": "0.00000025", "completion": "0.000001"}, "qwen/qwen3-4b:free": {"name": "Qwen: Qwen3 4B (free)", "prompt": "0", "completion": "0"}, "deepseek/deepseek-prover-v2": {"name": "DeepSeek: DeepSeek Prover V2", "prompt": "0.0000005", "completion": "0.00000218"}, "meta-llama/llama-guard-4-12b": {"name": "Meta: Llama Guard 4 12B", "prompt": "0.00000018", "completion": "0.00000018"}, "qwen/qwen3-30b-a3b:free": {"name": "Qwen: Qwen3 30B A3B (free)", "prompt": "0", "completion": "0"}, "qwen/qwen3-30b-a3b": {"name": "Qwen: Qwen3 30B A3B", "prompt": "0.00000006", "completion": "0.00000022"}, "qwen/qwen3-8b": {"name": "Qwen: Qwen3 8B", "prompt": "0.000000035", "completion": "0.000000138"}, "qwen/qwen3-14b:free": {"name": "Qwen: Qwen3 14B (free)", "prompt": "0", "completion": "0"}, "qwen/qwen3-14b": {"name": "Qwen: Qwen3 14B", "prompt": "0.00000005", "completion": "0.00000022"}, "qwen/qwen3-32b": {"name": "Qwen: Qwen3 32B", "prompt": "0.00000005", "completion": "0.0000002"}, "qwen/qwen3-235b-a22b:free": {"name": "Qwen: Qwen3 235B A22B (free)", "prompt": "0", "completion": "0"}, "qwen/qwen3-235b-a22b": {"name": "Qwen: Qwen3 235B A22B", "prompt": "0.00000018", "completion": "0.00000054"}, "tngtech/deepseek-r1t-chimera:free": {"name": "TNG: DeepSeek R1T Chimera (free)", "prompt": "0", "completion": "0"}, "tngtech/deepseek-r1t-chimera": {"name": "TNG: DeepSeek R1T Chimera", "prompt": "0.0000003", "completion": "0.0000012"}, "microsoft/mai-ds-r1:free": {"name": "Microsoft: MAI DS R1 (free)", "prompt": "0", "completion": "0"}, "microsoft/mai-ds-r1": {"name": "Microsoft: MAI DS R1", "prompt": "0.0000003", "completion": "0.0000012"}, "openai/o4-mini-high": {"name": "OpenAI: o4 Mini High", "prompt": "0.0000011", "completion": "0.0000044"}, "openai/o3": {"name": "OpenAI: o3", "prompt": "0.000002", "completion": "0.000008"}, "openai/o4-mini": {"name": "OpenAI: o4 Mini", "prompt": "0.0000011", "completion": "0.0000044"}, "qwen/qwen2.5-coder-7b-instruct": {"name": "Qwen: Qwen2.5 Coder 7B Instruct", "prompt": "0.00000003", "completion": "0.00000009"}, "openai/gpt-4.1": {"name": "OpenAI: GPT-4.1", "prompt": "0.000002", "completion": "0.000008"}, "openai/gpt-4.1-mini": {"name": "OpenAI: GPT-4.1 Mini", "prompt": "0.0000004", "completion": "0.0000016"}, "openai/gpt-4.1-nano": {"name": "OpenAI: GPT-4.1 Nano", "prompt": "0.0000001", "completion": "0.0000004"}, "eleutherai/llemma_7b": {"name": "EleutherAI: Llemma 7b", "prompt": "0.0000008", "completion": "0.0000012"}, "alfredpros/codellama-7b-instruct-solidity": {"name": "AlfredPros: CodeLLaMa 7B Instruct Solidity", "prompt": "0.0000008", "completion": "0.0000012"}, "arliai/qwq-32b-arliai-rpr-v1:free": {"name": "ArliAI: QwQ 32B RpR v1 (free)", "prompt": "0", "completion": "0"}, "arliai/qwq-32b-arliai-rpr-v1": {"name": "ArliAI: QwQ 32B RpR v1", "prompt": "0.00000003", "completion": "0.00000011"}, "agentica-org/deepcoder-14b-preview:free": {"name": "Agentica: Deepcoder 14B Preview (free)", "prompt": "0", "completion": "0"}, "agentica-org/deepcoder-14b-preview": {"name": "Agentica: Deepcoder 14B Preview", "prompt": "0.000000015", "completion": "0.000000015"}, "x-ai/grok-3-mini-beta": {"name": "xAI: Grok 3 Mini Beta", "prompt": "0.0000003", "completion": "0.0000005"}, "x-ai/grok-3-beta": {"name": "xAI: Grok 3 Beta", "prompt": "0.000003", "completion": "0.000015"}, "nvidia/llama-3.1-nemotron-ultra-253b-v1": {"name": "NVIDIA: Llama 3.1 Nemotron Ultra 253B v1", "prompt": "0.0000006", "completion": "0.0000018"}, "meta-llama/llama-4-maverick:free": {"name": "Meta: Llama 4 Maverick (free)", "prompt": "0", "completion": "0"}, "meta-llama/llama-4-maverick": {"name": "Meta: Llama 4 Maverick", "prompt": "0.00000015", "completion": "0.0000006"}, "meta-llama/llama-4-scout:free": {"name": "Meta: Llama 4 Scout (free)", "prompt": "0", "completion": "0"}, "meta-llama/llama-4-scout": {"name": "Meta: Llama 4 Scout", "prompt": "0.00000008", "completion": "0.0000003"}, "qwen/qwen2.5-vl-32b-instruct:free": {"name": "Qwen: Qwen2.5 VL 32B Instruct (free)", "prompt": "0", "completion": "0"}, "qwen/qwen2.5-vl-32b-instruct": {"name": "Qwen: Qwen2.5 VL 32B Instruct", "prompt": "0.00000005", "completion": "0.00000022"}, "deepseek/deepseek-chat-v3-0324:free": {"name": "DeepSeek: DeepSeek V3 0324 (free)", "prompt": "0", "completion": "0"}, "deepseek/deepseek-chat-v3-0324": {"name": "DeepSeek: DeepSeek V3 0324", "prompt": "0.00000024", "completion": "0.00000084"}, "openai/o1-pro": {"name": "OpenAI: o1-pro", "prompt": "0.00015", "completion": "0.0006"}, "mistralai/mistral-small-3.1-24b-instruct:free": {"name": "Mistral: Mistral Small 3.1 24B (free)", "prompt": "0", "completion": "0"}, "mistralai/mistral-small-3.1-24b-instruct": {"name": "Mistral: Mistral Small 3.1 24B", "prompt": "0.00000005", "completion": "0.00000022"}, "allenai/olmo-2-0325-32b-instruct": {"name": "AllenAI: Olmo 2 32B Instruct", "prompt": "0.0000002", "completion": "0.00000035"}, "google/gemma-3-4b-it:free": {"name": "Google: Gemma 3 4B (free)", "prompt": "0", "completion": "0"}, "google/gemma-3-4b-it": {"name": "Google: Gemma 3 4B", "prompt": "0.00000001703012", "completion": "0.0000000681536"}, "google/gemma-3-12b-it:free": {"name": "Google: Gemma 3 12B (free)", "prompt": "0", "completion": "0"}, "google/gemma-3-12b-it": {"name": "Google: Gemma 3 12B", "prompt": "0.00000003", "completion": "0.0000001"}, "cohere/command-a": {"name": "Cohere: Command A", "prompt": "0.0000025", "completion": "0.00001"}, "openai/gpt-4o-mini-search-preview": {"name": "OpenAI: GPT-4o-mini Search Preview", "prompt": "0.00000015", "completion": "0.0000006"}, "openai/gpt-4o-search-preview": {"name": "OpenAI: GPT-4o Search Preview", "prompt": "0.0000025", "completion": "0.00001"}, "google/gemma-3-27b-it:free": {"name": "Google: Gemma 3 27B (free)", "prompt": "0", "completion": "0"}, "google/gemma-3-27b-it": {"name": "Google: Gemma 3 27B", "prompt": "0.00000009", "completion": "0.00000016"}, "thedrummer/skyfall-36b-v2": {"name": "TheDrummer: Skyfall 36B V2", "prompt": "0.0000005", "completion": "0.0000008"}, "microsoft/phi-4-multimodal-instruct": {"name": "Microsoft: Phi 4 Multimodal Instruct", "prompt": "0.00000005", "completion": "0.0000001"}, "perplexity/sonar-reasoning-pro": {"name": "Perplexity: Sonar Reasoning Pro", "prompt": "0.000002", "completion": "0.000008"}, "perplexity/sonar-pro": {"name": "Perplexity: Sonar Pro", "prompt": "0.000003", "completion": "0.000015"}, "perplexity/sonar-deep-research": {"name": "Perplexity: Sonar Deep Research", "prompt": "0.000002", "completion": "0.000008"}, "qwen/qwq-32b": {"name": "Qwen: QwQ 32B", "prompt": "0.00000015", "completion": "0.0000004"}, "google/gemini-2.0-flash-lite-001": {"name": "Google: Gemini 2.0 Flash Lite", "prompt": "0.000000075", "completion": "0.0000003"}, "anthropic/claude-3.7-sonnet:thinking": {"name": "Anthropic: Claude 3.7 Sonnet (thinking)", "prompt": "0.000003", "completion": "0.000015"}, "anthropic/claude-3.7-sonnet": {"name": "Anthropic: Claude 3.7 Sonnet", "prompt": "0.000003", "completion": "0.000015"}, "mistralai/mistral-saba": {"name": "Mistral: Saba", "prompt": "0.0000002", "completion": "0.0000006"}, "meta-llama/llama-guard-3-8b": {"name": "Llama Guard 3 8B", "prompt": "0.00000002", "completion": "0.00000006"}, "openai/o3-mini-high": {"name": "OpenAI: o3 Mini High", "prompt": "0.0000011", "completion": "0.0000044"}, "google/gemini-2.0-flash-001": {"name": "Google: Gemini 2.0 Flash", "prompt": "0.0000001", "completion": "0.0000004"}, "qwen/qwen-vl-plus": {"name": "Qwen: Qwen VL Plus", "prompt": "0.00000021", "completion": "0.00000063"}, "aion-labs/aion-1.0": {"name": "AionLabs: Aion-1.0", "prompt": "0.000004", "completion": "0.000008"}, "aion-labs/aion-1.0-mini": {"name": "AionLabs: Aion-1.0-Mini", "prompt": "0.0000007", "completion": "0.0000014"}, "aion-labs/aion-rp-llama-3.1-8b": {"name": "AionLabs: Aion-RP 1.0 (8B)", "prompt": "0.0000002", "completion": "0.0000002"}, "qwen/qwen-vl-max": {"name": "Qwen: Qwen VL Max", "prompt": "0.0000008", "completion": "0.0000032"}, "qwen/qwen-turbo": {"name": "Qwen: Qwen-Turbo", "prompt": "0.00000005", "completion": "0.0000002"}, "qwen/qwen2.5-vl-72b-instruct": {"name": "Qwen: Qwen2.5 VL 72B Instruct", "prompt": "0.00000008", "completion": "0.00000033"}, "qwen/qwen-plus": {"name": "Qwen: Qwen-Plus", "prompt": "0.0000004", "completion": "0.0000012"}, "qwen/qwen-max": {"name": "Qwen: Qwen-Max ", "prompt": "0.0000016", "completion": "0.0000064"}, "openai/o3-mini": {"name": "OpenAI: o3 Mini", "prompt": "0.0000011", "completion": "0.0000044"}, "mistralai/mistral-small-24b-instruct-2501:free": {"name": "Mistral: Mistral Small 3 (free)", "prompt": "0", "completion": "0"}, "mistralai/mistral-small-24b-instruct-2501": {"name": "Mistral: Mistral Small 3", "prompt": "0.00000005", "completion": "0.00000008"}, "deepseek/deepseek-r1-distill-qwen-32b": {"name": "DeepSeek: R1 Distill Qwen 32B", "prompt": "0.00000027", "completion": "0.00000027"}, "deepseek/deepseek-r1-distill-qwen-14b": {"name": "DeepSeek: R1 Distill Qwen 14B", "prompt": "0.00000015", "completion": "0.00000015"}, "perplexity/sonar-reasoning": {"name": "Perplexity: Sonar Reasoning", "prompt": "0.000001", "completion": "0.000005"}, "perplexity/sonar": {"name": "Perplexity: Sonar", "prompt": "0.000001", "completion": "0.000001"}, "deepseek/deepseek-r1-distill-llama-70b:free": {"name": "DeepSeek: R1 Distill Llama 70B (free)", "prompt": "0", "completion": "0"}, "deepseek/deepseek-r1-distill-llama-70b": {"name": "DeepSeek: R1 Distill Llama 70B", "prompt": "0.00000003", "completion": "0.00000013"}, "deepseek/deepseek-r1:free": {"name": "DeepSeek: R1 (free)", "prompt": "0", "completion": "0"}, "deepseek/deepseek-r1": {"name": "DeepSeek: R1", "prompt": "0.0000003", "completion": "0.0000012"}, "minimax/minimax-01": {"name": "MiniMax: MiniMax-01", "prompt": "0.0000002", "completion": "0.0000011"}, "mistralai/codestral-2501": {"name": "Mistral: Codestral 2501", "prompt": "0.0000003", "completion": "0.0000009"}, "microsoft/phi-4": {"name": "Microsoft: Phi 4", "prompt": "0.00000006", "completion": "0.00000014"}, "sao10k/l3.1-70b-hanami-x1": {"name": "Sao10K: Llama 3.1 70B Hanami x1", "prompt": "0.000003", "completion": "0.000003"}, "deepseek/deepseek-chat": {"name": "DeepSeek: DeepSeek V3", "prompt": "0.0000003", "completion": "0.0000012"}, "sao10k/l3.3-euryale-70b": {"name": "Sao10K: Llama 3.3 Euryale 70B", "prompt": "0.00000065", "completion": "0.00000075"}, "openai/o1": {"name": "OpenAI: o1", "prompt": "0.000015", "completion": "0.00006"}, "cohere/command-r7b-12-2024": {"name": "Cohere: Command R7B (12-2024)", "prompt": "0.0000000375", "completion": "0.00000015"}, "google/gemini-2.0-flash-exp:free": {"name": "Google: Gemini 2.0 Flash Experimental (free)", "prompt": "0", "completion": "0"}, "meta-llama/llama-3.3-70b-instruct:free": {"name": "Meta: Llama 3.3 70B Instruct (free)", "prompt": "0", "completion": "0"}, "meta-llama/llama-3.3-70b-instruct": {"name": "Meta: Llama 3.3 70B Instruct", "prompt": "0.00000013", "completion": "0.00000038"}, "amazon/nova-lite-v1": {"name": "Amazon: Nova Lite 1.0", "prompt": "0.00000006", "completion": "0.00000024"}, "amazon/nova-micro-v1": {"name": "Amazon: Nova Micro 1.0", "prompt": "0.000000035", "completion": "0.00000014"}, "amazon/nova-pro-v1": {"name": "Amazon: Nova Pro 1.0", "prompt": "0.0000008", "completion": "0.0000032"}, "openai/gpt-4o-2024-11-20": {"name": "OpenAI: GPT-4o (2024-11-20)", "prompt": "0.0000025", "completion": "0.00001"}, "mistralai/mistral-large-2411": {"name": "Mistral Large 2411", "prompt": "0.000002", "completion": "0.000006"}, "mistralai/mistral-large-2407": {"name": "Mistral Large 2407", "prompt": "0.000002", "completion": "0.000006"}, "mistralai/pixtral-large-2411": {"name": "Mistral: Pixtral Large 2411", "prompt": "0.000002", "completion": "0.000006"}, "qwen/qwen-2.5-coder-32b-instruct:free": {"name": "Qwen2.5 Coder 32B Instruct (free)", "prompt": "0", "completion": "0"}, "qwen/qwen-2.5-coder-32b-instruct": {"name": "Qwen2.5 Coder 32B Instruct", "prompt": "0.00000004", "completion": "0.00000016"}, "raifle/sorcererlm-8x22b": {"name": "SorcererLM 8x22B", "prompt": "0.0000045", "completion": "0.0000045"}, "thedrummer/unslopnemo-12b": {"name": "TheDrummer: UnslopNemo 12B", "prompt": "0.0000004", "completion": "0.0000004"}, "anthropic/claude-3.5-haiku-20241022": {"name": "Anthropic: Claude 3.5 Haiku (2024-10-22)", "prompt": "0.0000008", "completion": "0.000004"}, "anthropic/claude-3.5-haiku": {"name": "Anthropic: Claude 3.5 Haiku", "prompt": "0.0000008", "completion": "0.000004"}, "anthracite-org/magnum-v4-72b": {"name": "Magnum v4 72B", "prompt": "0.000003", "completion": "0.000005"}, "anthropic/claude-3.5-sonnet": {"name": "Anthropic: Claude 3.5 Sonnet", "prompt": "0.000003", "completion": "0.000015"}, "mistralai/ministral-3b": {"name": "Mistral: Ministral 3B", "prompt": "0.00000004", "completion": "0.00000004"}, "mistralai/ministral-8b": {"name": "Mistral: Ministral 8B", "prompt": "0.0000001", "completion": "0.0000001"}, "qwen/qwen-2.5-7b-instruct": {"name": "Qwen: Qwen2.5 7B Instruct", "prompt": "0.00000004", "completion": "0.0000001"}, "nvidia/llama-3.1-nemotron-70b-instruct": {"name": "NVIDIA: Llama 3.1 Nemotron 70B Instruct", "prompt": "0.0000006", "completion": "0.0000006"}, "inflection/inflection-3-pi": {"name": "Inflection: Inflection 3 Pi", "prompt": "0.0000025", "completion": "0.00001"}, "inflection/inflection-3-productivity": {"name": "Inflection: Inflection 3 Productivity", "prompt": "0.0000025", "completion": "0.00001"}, "thedrummer/rocinante-12b": {"name": "TheDrummer: Rocinante 12B", "prompt": "0.00000017", "completion": "0.00000043"}, "meta-llama/llama-3.2-3b-instruct:free": {"name": "Meta: Llama 3.2 3B Instruct (free)", "prompt": "0", "completion": "0"}, "meta-llama/llama-3.2-3b-instruct": {"name": "Meta: Llama 3.2 3B Instruct", "prompt": "0.00000002", "completion": "0.00000002"}, "meta-llama/llama-3.2-90b-vision-instruct": {"name": "Meta: Llama 3.2 90B Vision Instruct", "prompt": "0.00000035", "completion": "0.0000004"}, "meta-llama/llama-3.2-11b-vision-instruct": {"name": "Meta: Llama 3.2 11B Vision Instruct", "prompt": "0.000000049", "completion": "0.000000049"}, "meta-llama/llama-3.2-1b-instruct": {"name": "Meta: Llama 3.2 1B Instruct", "prompt": "0.000000027", "completion": "0.0000002"}, "qwen/qwen-2.5-72b-instruct:free": {"name": "Qwen2.5 72B Instruct (free)", "prompt": "0", "completion": "0"}, "qwen/qwen-2.5-72b-instruct": {"name": "Qwen2.5 72B Instruct", "prompt": "0.00000007", "completion": "0.00000026"}, "neversleep/llama-3.1-lumimaid-8b": {"name": "NeverSleep: Lumimaid v0.2 8B", "prompt": "0.00000009", "completion": "0.0000006"}, "mistralai/pixtral-12b": {"name": "Mistral: Pixtral 12B", "prompt": "0.0000001", "completion": "0.0000001"}, "cohere/command-r-08-2024": {"name": "Cohere: Command R (08-2024)", "prompt": "0.00000015", "completion": "0.0000006"}, "cohere/command-r-plus-08-2024": {"name": "Cohere: Command R+ (08-2024)", "prompt": "0.0000025", "completion": "0.00001"}, "sao10k/l3.1-euryale-70b": {"name": "Sao10K: Llama 3.1 Euryale 70B v2.2", "prompt": "0.00000065", "completion": "0.00000075"}, "qwen/qwen-2.5-vl-7b-instruct": {"name": "Qwen: Qwen2.5-VL 7B Instruct", "prompt": "0.0000002", "completion": "0.0000002"}, "microsoft/phi-3.5-mini-128k-instruct": {"name": "Microsoft: Phi-3.5 Mini 128K Instruct", "prompt": "0.0000001", "completion": "0.0000001"}, "nousresearch/hermes-3-llama-3.1-70b": {"name": "Nous: Hermes 3 70B Instruct", "prompt": "0.0000003", "completion": "0.0000003"}, "nousresearch/hermes-3-llama-3.1-405b:free": {"name": "Nous: Hermes 3 405B Instruct (free)", "prompt": "0", "completion": "0"}, "nousresearch/hermes-3-llama-3.1-405b": {"name": "Nous: Hermes 3 405B Instruct", "prompt": "0.000001", "completion": "0.000001"}, "openai/chatgpt-4o-latest": {"name": "OpenAI: ChatGPT-4o", "prompt": "0.000005", "completion": "0.000015"}, "sao10k/l3-lunaris-8b": {"name": "Sao10K: Llama 3 8B Lunaris", "prompt": "0.00000004", "completion": "0.00000005"}, "openai/gpt-4o-2024-08-06": {"name": "OpenAI: GPT-4o (2024-08-06)", "prompt": "0.0000025", "completion": "0.00001"}, "meta-llama/llama-3.1-405b": {"name": "Meta: Llama 3.1 405B (base)", "prompt": "0.000004", "completion": "0.000004"}, "meta-llama/llama-3.1-405b-instruct": {"name": "Meta: Llama 3.1 405B Instruct", "prompt": "0.0000035", "completion": "0.0000035"}, "meta-llama/llama-3.1-70b-instruct": {"name": "Meta: Llama 3.1 70B Instruct", "prompt": "0.0000004", "completion": "0.0000004"}, "meta-llama/llama-3.1-8b-instruct": {"name": "Meta: Llama 3.1 8B Instruct", "prompt": "0.00000002", "completion": "0.00000003"}, "mistralai/mistral-nemo:free": {"name": "Mistral: Mistral Nemo (free)", "prompt": "0", "completion": "0"}, "mistralai/mistral-nemo": {"name": "Mistral: Mistral Nemo", "prompt": "0.00000002", "completion": "0.00000004"}, "openai/gpt-4o-mini": {"name": "OpenAI: GPT-4o-mini", "prompt": "0.00000015", "completion": "0.0000006"}, "openai/gpt-4o-mini-2024-07-18": {"name": "OpenAI: GPT-4o-mini (2024-07-18)", "prompt": "0.00000015", "completion": "0.0000006"}, "google/gemma-2-27b-it": {"name": "Google: Gemma 2 27B", "prompt": "0.00000065", "completion": "0.00000065"}, "google/gemma-2-9b-it": {"name": "Google: Gemma 2 9B", "prompt": "0.00000003", "completion": "0.00000009"}, "anthropic/claude-3.5-sonnet-20240620": {"name": "Anthropic: Claude 3.5 Sonnet (2024-06-20)", "prompt": "0.000003", "completion": "0.000015"}, "sao10k/l3-euryale-70b": {"name": "Sao10k: Llama 3 Euryale 70B v2.1", "prompt": "0.00000148", "completion": "0.00000148"}, "mistralai/mistral-7b-instruct-v0.3": {"name": "Mistral: Mistral 7B Instruct v0.3", "prompt": "0.0000002", "completion": "0.0000002"}, "nousresearch/hermes-2-pro-llama-3-8b": {"name": "NousResearch: Hermes 2 Pro - Llama-3 8B", "prompt": "0.000000025", "completion": "0.00000008"}, "mistralai/mistral-7b-instruct:free": {"name": "Mistral: Mistral 7B Instruct (free)", "prompt": "0", "completion": "0"}, "mistralai/mistral-7b-instruct": {"name": "Mistral: Mistral 7B Instruct", "prompt": "0.000000028", "completion": "0.000000054"}, "microsoft/phi-3-mini-128k-instruct": {"name": "Microsoft: Phi-3 Mini 128K Instruct", "prompt": "0.0000001", "completion": "0.0000001"}, "microsoft/phi-3-medium-128k-instruct": {"name": "Microsoft: Phi-3 Medium 128K Instruct", "prompt": "0.000001", "completion": "0.000001"}, "openai/gpt-4o-2024-05-13": {"name": "OpenAI: GPT-4o (2024-05-13)", "prompt": "0.000005", "completion": "0.000015"}, "openai/gpt-4o": {"name": "OpenAI: GPT-4o", "prompt": "0.0000025", "completion": "0.00001"}, "openai/gpt-4o:extended": {"name": "OpenAI: GPT-4o (extended)", "prompt": "0.000006", "completion": "0.000018"}, "meta-llama/llama-guard-2-8b": {"name": "Meta: LlamaGuard 2 8B", "prompt": "0.0000002", "completion": "0.0000002"}, "meta-llama/llama-3-70b-instruct": {"name": "Meta: Llama 3 70B Instruct", "prompt": "0.0000003", "completion": "0.0000004"}, "meta-llama/llama-3-8b-instruct": {"name": "Meta: Llama 3 8B Instruct", "prompt": "0.00000003", "completion": "0.00000006"}, "mistralai/mixtral-8x22b-instruct": {"name": "Mistral: Mixtral 8x22B Instruct", "prompt": "0.000002", "completion": "0.000006"}, "microsoft/wizardlm-2-8x22b": {"name": "WizardLM-2 8x22B", "prompt": "0.00000048", "completion": "0.00000048"}, "openai/gpt-4-turbo": {"name": "OpenAI: GPT-4 Turbo", "prompt": "0.00001", "completion": "0.00003"}, "anthropic/claude-3-haiku": {"name": "Anthropic: Claude 3 Haiku", "prompt": "0.00000025", "completion": "0.00000125"}, "anthropic/claude-3-opus": {"name": "Anthropic: Claude 3 Opus", "prompt": "0.000015", "completion": "0.000075"}, "mistralai/mistral-large": {"name": "Mistral Large", "prompt": "0.000002", "completion": "0.000006"}, "openai/gpt-3.5-turbo-0613": {"name": "OpenAI: GPT-3.5 Turbo (older v0613)", "prompt": "0.000001", "completion": "0.000002"}, "openai/gpt-4-turbo-preview": {"name": "OpenAI: GPT-4 Turbo Preview", "prompt": "0.00001", "completion": "0.00003"}, "mistralai/mistral-small": {"name": "Mistral Small", "prompt": "0.0000002", "completion": "0.0000006"}, "mistralai/mistral-tiny": {"name": "Mistral Tiny", "prompt": "0.00000025", "completion": "0.00000025"}, "mistralai/mistral-7b-instruct-v0.2": {"name": "Mistral: Mistral 7B Instruct v0.2", "prompt": "0.0000002", "completion": "0.0000002"}, "mistralai/mixtral-8x7b-instruct": {"name": "Mistral: Mixtral 8x7B Instruct", "prompt": "0.00000054", "completion": "0.00000054"}, "neversleep/noromaid-20b": {"name": "Noromaid 20B", "prompt": "0.000001", "completion": "0.00000175"}, "alpindale/goliath-120b": {"name": "Goliath 120B", "prompt": "0.000006", "completion": "0.000008"}, "openrouter/auto": {"name": "Auto Router", "prompt": "-1", "completion": "-1"}, "openai/gpt-4-1106-preview": {"name": "OpenAI: GPT-4 Turbo (older v1106)", "prompt": "0.00001", "completion": "0.00003"}, "mistralai/mistral-7b-instruct-v0.1": {"name": "Mistral: Mistral 7B Instruct v0.1", "prompt": "0.00000011", "completion": "0.00000019"}, "openai/gpt-3.5-turbo-instruct": {"name": "OpenAI: GPT-3.5 Turbo Instruct", "prompt": "0.0000015", "completion": "0.000002"}, "openai/gpt-3.5-turbo-16k": {"name": "OpenAI: GPT-3.5 Turbo 16k", "prompt": "0.000003", "completion": "0.000004"}, "mancer/weaver": {"name": "Mancer: Weaver (alpha)", "prompt": "0.000001125", "completion": "0.000001125"}, "undi95/remm-slerp-l2-13b": {"name": "ReMM SLERP 13B", "prompt": "0.00000045", "completion": "0.00000065"}, "gryphe/mythomax-l2-13b": {"name": "MythoMax 13B", "prompt": "0.00000006", "completion": "0.00000006"}, "openai/gpt-4": {"name": "OpenAI: GPT-4", "prompt": "0.00003", "completion": "0.00006"}, "openai/gpt-3.5-turbo": {"name": "OpenAI: GPT-3.5 Turbo", "prompt": "0.0000005", "completion": "0.0000015"}, "openai/gpt-4-0314": {"name": "OpenAI: GPT-4 (older v0314)", "prompt": "0.00003", "completion": "0.00006"}}
-;
+        // Stats from custom_stats.json (fetched 2025-01-12)
+        // Using overall mean for cached tokens (already accounts for cache hit rate)
+        const STATS = {
+            model: {
+                cachedTokens: 1771  // overall mean (includes cache misses)
+            },
+            judge: {
+                inputTokens: 8933,  // mean
+                outputTokens: 774,  // mean
+                cachedTokens: 5128  // overall mean (includes cache misses)
+            }
+        };
 
         const PERCENTILE_VALUES = {
+            mean: {
+                input: 4874,
+                output: 879
+            },
+            p50: {
+                input: 4787,
+                output: 635
+            },
+            p75: {
+                input: 5039,
+                output: 1216
+            },
             p90: {
-                input: 5253,
-                output: 1745
+                input: 5250,
+                output: 1744
             },
             p95: {
                 input: 5288,
-                output: 2039
+                output: 2038
             },
-            p96: {
-                input: 5294,
-                output: 2135
-            },
-            p97: {
-                input: 5300,
-                output: 2297
-            },
-            p98: {
-                input: 5310,
-                output: 2481
-            },
+            // p96: {
+            //     input: 5294,
+            //     output: 2135
+            // },
+            // p97: {
+            //     input: 5300,
+            //     output: 2290
+            // },
+            // p98: {
+            //     input: 5310,
+            //     output: 2481
+            // },
             p99: {
                 input: 5323,
                 output: 2786
             }
         };
 
-        const CONSTANT_VALUE = 0.006;
-
-        // Populate datalist with all models on page load
+        // Populate datalists with all models on page load
         window.addEventListener('DOMContentLoaded', () => {
-            const datalist = document.getElementById('modelList');
-            Object.entries(MODELS_CACHE).forEach(([id, model]) => {
+            const modelDatalist = document.getElementById('modelList');
+            const judgeDatalist = document.getElementById('judgeModelList');
+
+            Object.entries(MODEL_PRICING).forEach(([id, model]) => {
                 const option = document.createElement('option');
                 option.value = id;
                 option.textContent = `${model.name} - ${id}`;
-                datalist.appendChild(option);
+
+                const option2 = option.cloneNode(true);
+                modelDatalist.appendChild(option);
+                judgeDatalist.appendChild(option2);
             });
         });
 
@@ -477,26 +513,55 @@
 
         function addModel() {
             const input = document.getElementById('multiModelInput_field');
-            const modelId = input.value.trim();
+            const inputValue = input.value.trim();
 
-            if (!modelId) {
+            if (!inputValue) {
                 return;
             }
 
-            const model = MODELS_CACHE[modelId];
-            if (!model) {
-                alert(`Model "${modelId}" not found. Please select a valid model from autocomplete.`);
+            // Split by commas, newlines, and/or spaces, then trim and filter empty strings
+            const modelIds = inputValue
+                .split(/[\n,\s]+/)
+                .map(id => id.trim())
+                .filter(id => id.length > 0);
+
+            if (modelIds.length === 0) {
                 return;
             }
 
-            if (selectedModels.includes(modelId)) {
-                alert(`Model "${modelId}" is already added.`);
-                return;
-            }
+            const added = [];
+            const alreadyAdded = [];
+            const notFound = [];
 
-            selectedModels.push(modelId);
+            modelIds.forEach(modelId => {
+                if (selectedModels.includes(modelId)) {
+                    alreadyAdded.push(modelId);
+                } else if (MODEL_PRICING[modelId]) {
+                    selectedModels.push(modelId);
+                    added.push(modelId);
+                } else {
+                    notFound.push(modelId);
+                }
+            });
+
             input.value = '';
             updateSelectedModelsList();
+
+            // Show summary message
+            const messages = [];
+            if (added.length > 0) {
+                messages.push(`Added ${added.length} model${added.length > 1 ? 's' : ''}`);
+            }
+            if (alreadyAdded.length > 0) {
+                messages.push(`${alreadyAdded.length} already in list`);
+            }
+            if (notFound.length > 0) {
+                messages.push(`${notFound.length} not found: ${notFound.join(', ')}`);
+            }
+
+            if (messages.length > 0 && (alreadyAdded.length > 0 || notFound.length > 0)) {
+                alert(messages.join('\n'));
+            }
         }
 
         function removeModel(modelId) {
@@ -514,7 +579,7 @@
 
             let html = '';
             selectedModels.forEach(modelId => {
-                const model = MODELS_CACHE[modelId];
+                const model = MODEL_PRICING[modelId];
                 html += `
                     <div class="model-item">
                         <span title="${model.name}">${model.name}</span>
@@ -526,32 +591,78 @@
         }
 
         function fetchPricing() {
-            const resultDiv = document.getElementById('result');
             const isMulti = document.getElementById('multiModelMode').checked;
+            const judgeModelId = document.getElementById('judgeModelId').value.trim();
+            const resultDiv = document.getElementById('result');
+
+            if (!judgeModelId) {
+                resultDiv.innerHTML = '<div class="error">Please enter a judge model ID</div>';
+                return;
+            }
+
+            const judgeModel = MODEL_PRICING[judgeModelId];
+            if (!judgeModel) {
+                resultDiv.innerHTML = `<div class="error">Judge model "${judgeModelId}" not found. Try typing to see autocomplete suggestions.</div>`;
+                return;
+            }
 
             if (isMulti) {
-                // Multiple models mode
+                // Multi-model mode: sum costs of all selected models
                 if (selectedModels.length === 0) {
                     resultDiv.innerHTML = '<div class="error">Please add at least one model</div>';
                     return;
                 }
 
+                // Sum up costs for all models
                 let totalInputCost = 0;
                 let totalOutputCost = 0;
-                const modelDetails = [];
+                let totalInputCacheRead = 0;
+                let totalInputCacheWrite = 0;
+                let hasAnyCacheRead = false;
+                let hasAnyCacheWrite = false;
+
+                const modelNames = [];
 
                 for (const modelId of selectedModels) {
-                    const model = MODELS_CACHE[modelId];
-                    const inputCost = parseFloat(model.prompt);
-                    const outputCost = parseFloat(model.completion);
+                    const model = MODEL_PRICING[modelId];
+                    totalInputCost += parseFloat(model.prompt);
+                    totalOutputCost += parseFloat(model.completion);
 
-                    totalInputCost += inputCost;
-                    totalOutputCost += outputCost;
-                    modelDetails.push({ name: model.name, inputCost, outputCost });
+                    if (model.inputCacheRead) {
+                        totalInputCacheRead += parseFloat(model.inputCacheRead);
+                        hasAnyCacheRead = true;
+                    } else {
+                        totalInputCacheRead += parseFloat(model.prompt);
+                    }
+
+                    if (model.inputCacheWrite) {
+                        totalInputCacheWrite += parseFloat(model.inputCacheWrite);
+                        hasAnyCacheWrite = true;
+                    } else {
+                        totalInputCacheWrite += parseFloat(model.prompt);
+                    }
+
+                    modelNames.push(model.name);
                 }
 
-                const modelNamesList = modelDetails.map(m => m.name).join(', ');
-                calculateCost(totalInputCost, totalOutputCost, `Multiple Models (${modelDetails.length}): ${modelNamesList}`);
+                const judgeInputCost = parseFloat(judgeModel.prompt);
+                const judgeOutputCost = parseFloat(judgeModel.completion);
+                const judgeInputCacheRead = judgeModel.inputCacheRead ? parseFloat(judgeModel.inputCacheRead) : null;
+                const judgeInputCacheWrite = judgeModel.inputCacheWrite ? parseFloat(judgeModel.inputCacheWrite) : null;
+
+                calculateCost(
+                    totalInputCost,
+                    totalOutputCost,
+                    hasAnyCacheRead ? totalInputCacheRead : null,
+                    hasAnyCacheWrite ? totalInputCacheWrite : null,
+                    judgeInputCost,
+                    judgeOutputCost,
+                    judgeInputCacheRead,
+                    judgeInputCacheWrite,
+                    `Multiple Models (${selectedModels.length}): ${modelNames.join(', ')}`,
+                    judgeModel.name,
+                    selectedModels.length  // Pass number of models for judge cost multiplication
+                );
             } else {
                 // Single model mode
                 const modelId = document.getElementById('modelId').value.trim();
@@ -561,7 +672,7 @@
                     return;
                 }
 
-                const model = MODELS_CACHE[modelId];
+                const model = MODEL_PRICING[modelId];
 
                 if (!model) {
                     resultDiv.innerHTML = `<div class="error">Model "${modelId}" not found. Try typing to see autocomplete suggestions.</div>`;
@@ -570,19 +681,34 @@
 
                 const inputCostPerToken = parseFloat(model.prompt);
                 const outputCostPerToken = parseFloat(model.completion);
+                const inputCacheRead = model.inputCacheRead ? parseFloat(model.inputCacheRead) : null;
+                const inputCacheWrite = model.inputCacheWrite ? parseFloat(model.inputCacheWrite) : null;
 
-                if (inputCostPerToken < 0 || outputCostPerToken < 0) {
-                    resultDiv.innerHTML = '<div class="error">Invalid pricing data for this model</div>';
-                    return;
-                }
+                const judgeInputCost = parseFloat(judgeModel.prompt);
+                const judgeOutputCost = parseFloat(judgeModel.completion);
+                const judgeInputCacheRead = judgeModel.inputCacheRead ? parseFloat(judgeModel.inputCacheRead) : null;
+                const judgeInputCacheWrite = judgeModel.inputCacheWrite ? parseFloat(judgeModel.inputCacheWrite) : null;
 
-                calculateCost(inputCostPerToken, outputCostPerToken, model.name);
+                calculateCost(
+                    inputCostPerToken,
+                    outputCostPerToken,
+                    inputCacheRead,
+                    inputCacheWrite,
+                    judgeInputCost,
+                    judgeOutputCost,
+                    judgeInputCacheRead,
+                    judgeInputCacheWrite,
+                    model.name,
+                    judgeModel.name,
+                    1  // Single model
+                );
             }
         }
 
         function calculateManual() {
             const inputCostPer1M = parseFloat(document.getElementById('inputCost').value);
             const outputCostPer1M = parseFloat(document.getElementById('outputCost').value);
+            const judgeModelId = document.getElementById('judgeModelId').value.trim();
             const resultDiv = document.getElementById('result');
 
             if (isNaN(inputCostPer1M) || isNaN(outputCostPer1M)) {
@@ -590,60 +716,227 @@
                 return;
             }
 
-            if (inputCostPer1M <= 0 || outputCostPer1M <= 0) {
-                resultDiv.innerHTML = '<div class="error">Costs must be greater than zero</div>';
+            if (!judgeModelId) {
+                resultDiv.innerHTML = '<div class="error">Please select a judge model</div>';
+                return;
+            }
+
+            const judgeModel = MODEL_PRICING[judgeModelId];
+            if (!judgeModel) {
+                resultDiv.innerHTML = `<div class="error">Judge model "${judgeModelId}" not found.</div>`;
                 return;
             }
 
             const inputCostPerToken = inputCostPer1M / 1_000_000;
             const outputCostPerToken = outputCostPer1M / 1_000_000;
 
-            calculateCost(inputCostPerToken, outputCostPerToken);
+            const judgeInputCost = parseFloat(judgeModel.prompt);
+            const judgeOutputCost = parseFloat(judgeModel.completion);
+            const judgeInputCacheRead = judgeModel.inputCacheRead ? parseFloat(judgeModel.inputCacheRead) : null;
+            const judgeInputCacheWrite = judgeModel.inputCacheWrite ? parseFloat(judgeModel.inputCacheWrite) : null;
+
+            calculateCost(
+                inputCostPerToken,
+                outputCostPerToken,
+                null, // no cache pricing for manual input
+                null,
+                judgeInputCost,
+                judgeOutputCost,
+                judgeInputCacheRead,
+                judgeInputCacheWrite,
+                'Manual Model',
+                judgeModel.name,
+                1  // Single model
+            );
         }
 
-        function calculateCost(inputCostPerToken, outputCostPerToken, modelName = null) {
+        function calculateCost(
+            inputCostPerToken,
+            outputCostPerToken,
+            inputCacheRead,
+            inputCacheWrite,
+            judgeInputCost,
+            judgeOutputCost,
+            judgeInputCacheRead,
+            judgeInputCacheWrite,
+            modelName = null,
+            judgeModelName = null,
+            numModels = 1
+        ) {
             const numRequests = parseInt(document.getElementById('numRequests').value) || 1;
             const timesToSample = parseInt(document.getElementById('timesToSample').value) || 1;
 
             const resultDiv = document.getElementById('result');
-
-            if (numRequests < 1 || timesToSample < 1) {
-                resultDiv.innerHTML = '<div class="error">Number of requests and times to sample must be at least 1</div>';
-                return;
-            }
             let headerHtml = '';
             let gridHtml = '';
 
             // Add header info
-            if (modelName) {
-                headerHtml += `<div style="font-size: 12px; color: #666; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #000;"><strong>${modelName}</strong></div>`;
+            if (modelName && judgeModelName) {
+                headerHtml += `<div style="font-size: 12px; color: #666; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #000;">
+                    <strong>Model:</strong> ${modelName} | <strong>Judge:</strong> ${judgeModelName}
+                </div>`;
             }
 
             headerHtml += `<div style="font-size: 11px; color: #666; margin-bottom: 10px;">
-                Input: $${(inputCostPerToken * 1_000_000).toFixed(2)}/1M tokens |
-                Output: $${(outputCostPerToken * 1_000_000).toFixed(2)}/1M tokens
+                <strong>Model:</strong> Input: $${(inputCostPerToken * 1_000_000).toFixed(2)}/1M | Output: $${(outputCostPerToken * 1_000_000).toFixed(2)}/1M
+                ${inputCacheRead ? ` | Cache Read: $${(inputCacheRead * 1_000_000).toFixed(2)}/1M` : ''}
+                ${inputCacheWrite ? ` | Cache Write: $${(inputCacheWrite * 1_000_000).toFixed(2)}/1M` : ''}
+                <br>
+                <strong>Judge:</strong> Input: $${(judgeInputCost * 1_000_000).toFixed(2)}/1M | Output: $${(judgeOutputCost * 1_000_000).toFixed(2)}/1M
+                ${judgeInputCacheRead ? ` | Cache Read: $${(judgeInputCacheRead * 1_000_000).toFixed(2)}/1M` : ''}
+                ${judgeInputCacheWrite ? ` | Cache Write: $${(judgeInputCacheWrite * 1_000_000).toFixed(2)}/1M` : ''}
             </div>`;
 
-            // Calculate for all percentiles
+            // Calculate judge costs (using fixed conservative mean)
+            const judgeInputTokens = STATS.judge.inputTokens;
+            const judgeOutputTokens = STATS.judge.outputTokens;
+            const judgeCachedTokens = STATS.judge.cachedTokens;
+            const judgeUncachedTokens = judgeInputTokens - judgeCachedTokens;
+
+            // Calculate for all percentiles (using fixed conservative mean for cache)
             Object.entries(PERCENTILE_VALUES).forEach(([percentile, values]) => {
-                const inputCost = inputCostPerToken * values.input;
-                const outputCost = outputCostPerToken * values.output;
-                const costPerAttempt = inputCost + outputCost + CONSTANT_VALUE;
-                const costPerRequest = costPerAttempt * timesToSample;
-                const totalCost = costPerRequest * numRequests;
+                const modelCachedTokens = STATS.model.cachedTokens;
+                const modelUncachedTokens = values.input - modelCachedTokens;
+
+                // === NO CACHE CALCULATION (BASELINE) ===
+                const modelNoCachePerAttempt = (values.input * inputCostPerToken) + (values.output * outputCostPerToken);
+                const judgeNoCachePerAttempt = (judgeInputTokens * judgeInputCost) + (judgeOutputTokens * judgeOutputCost);
+                // Judge evaluates each model's samples, so multiply by numModels
+                const noCacheCostPerRequest = (modelNoCachePerAttempt + judgeNoCachePerAttempt * numModels) * timesToSample;
+                const noCacheTotalCost = noCacheCostPerRequest * numRequests;
+
+                // === WITH CACHE CALCULATION ===
+                let withCacheTotalCost = noCacheTotalCost;
+                let hasCache = false;
+                let modelFirstAttempt = modelNoCachePerAttempt;
+                let modelLaterAttempt = modelNoCachePerAttempt;
+                let judgeFirstAttempt = judgeNoCachePerAttempt;
+                let judgeLaterAttempt = judgeNoCachePerAttempt;
+                let withCacheCostPerRequest = noCacheCostPerRequest;
+
+                if (inputCacheRead || inputCacheWrite || judgeInputCacheRead || judgeInputCacheWrite) {
+                    hasCache = true;
+
+                    // MODEL RESPONSE - First attempt
+                    if (inputCacheWrite) {
+                        const modelFirstInputCost = values.input * inputCostPerToken;
+                        const modelFirstCacheWriteCost = modelCachedTokens * inputCacheWrite;
+                        const modelFirstOutputCost = values.output * outputCostPerToken;
+                        modelFirstAttempt = modelFirstInputCost + modelFirstCacheWriteCost + modelFirstOutputCost;
+                    }
+
+                    // MODEL RESPONSE - Later attempts (cache read)
+                    if (inputCacheRead) {
+                        const modelLaterInputCost = modelUncachedTokens * inputCostPerToken;
+                        const modelLaterCacheCost = modelCachedTokens * inputCacheRead;
+                        const modelLaterOutputCost = values.output * outputCostPerToken;
+                        modelLaterAttempt = modelLaterInputCost + modelLaterCacheCost + modelLaterOutputCost;
+                    }
+
+                    // JUDGE RESPONSE - All attempts (cache hit rate ~2/3 already built into mean)
+                    // Use same calculation for all attempts since overall mean already accounts for
+                    // the distribution (1st attempt = no cache, 2nd/3rd = cache hit)
+                    let judgePerAttemptWithCache = judgeNoCachePerAttempt;
+                    if (judgeInputCacheRead || judgeInputCacheWrite) {
+                        const judgeInputCost_uncached = judgeUncachedTokens * judgeInputCost;
+                        const judgeInputCost_cached = judgeCachedTokens * (judgeInputCacheRead || judgeInputCost);
+                        const judgeOutputCostCalc = judgeOutputTokens * judgeOutputCost;
+                        judgePerAttemptWithCache = judgeInputCost_uncached + judgeInputCost_cached + judgeOutputCostCalc;
+                    }
+                    judgeFirstAttempt = judgePerAttemptWithCache;
+                    judgeLaterAttempt = judgePerAttemptWithCache;
+
+                    // Total per request with cache
+                    // Judge evaluates each model's samples, so multiply by numModels
+                    const firstAttemptTotal = modelFirstAttempt + judgeFirstAttempt * numModels;
+                    const laterAttemptsTotal = (timesToSample - 1) * (modelLaterAttempt + judgeLaterAttempt * numModels);
+                    withCacheCostPerRequest = firstAttemptTotal + laterAttemptsTotal;
+                    withCacheTotalCost = withCacheCostPerRequest * numRequests;
+                }
+
+                const savings = noCacheTotalCost - withCacheTotalCost;
+                const savingsPercent = hasCache ? ((savings / noCacheTotalCost) * 100) : 0;
+
+                // Build detailed breakdown - NO CACHE
+                let breakdownNoCache = `<strong style="color: #666;">WITHOUT CACHE:</strong><br>`;
+                breakdownNoCache += `<span style="font-size: 9px;">Model per attempt:</span><br>`;
+                breakdownNoCache += `- Input: ${values.input.toLocaleString()}t × $${(inputCostPerToken * 1_000_000).toFixed(2)}/1M = $${(values.input * inputCostPerToken).toFixed(4)}<br>`;
+                breakdownNoCache += `- Output: ${values.output.toLocaleString()}t × $${(outputCostPerToken * 1_000_000).toFixed(2)}/1M = $${(values.output * outputCostPerToken).toFixed(4)}<br>`;
+                breakdownNoCache += `= $${modelNoCachePerAttempt.toFixed(4)}<br>`;
+                breakdownNoCache += `<span style="font-size: 9px;">Judge per attempt:</span><br>`;
+                breakdownNoCache += `- Input: ${judgeInputTokens.toLocaleString()}t × $${(judgeInputCost * 1_000_000).toFixed(2)}/1M = $${(judgeInputTokens * judgeInputCost).toFixed(4)}<br>`;
+                breakdownNoCache += `- Output: ${judgeOutputTokens.toLocaleString()}t × $${(judgeOutputCost * 1_000_000).toFixed(2)}/1M = $${(judgeOutputTokens * judgeOutputCost).toFixed(4)}<br>`;
+                breakdownNoCache += `= $${judgeNoCachePerAttempt.toFixed(4)}${numModels > 1 ? ` × ${numModels} models` : ''}<br>`;
+                breakdownNoCache += `<br><strong>Per request:</strong> $${noCacheCostPerRequest.toFixed(4)}<br>`;
+                breakdownNoCache += `<strong>× ${numRequests.toLocaleString()} requests = $${noCacheTotalCost.toFixed(2)}</strong>`;
+
+                // Build detailed breakdown - WITH CACHE (if applicable)
+                let breakdownWithCache = '';
+                if (hasCache) {
+                    breakdownWithCache = `<br><br><strong style="color: #000;">WITH CACHE:</strong><br>`;
+                    breakdownWithCache += `<strong>Model Response:</strong><br>`;
+                    breakdownWithCache += `<span style="font-size: 9px;">First attempt:</span><br>`;
+                    breakdownWithCache += `- Input: ${values.input.toLocaleString()}t × $${(inputCostPerToken * 1_000_000).toFixed(2)}/1M = $${(values.input * inputCostPerToken).toFixed(4)}<br>`;
+                    if (inputCacheWrite) {
+                        breakdownWithCache += `- Cache write: ${modelCachedTokens.toLocaleString()}t × $${(inputCacheWrite * 1_000_000).toFixed(2)}/1M = $${(modelCachedTokens * inputCacheWrite).toFixed(4)}<br>`;
+                    } else if (inputCacheRead) {
+                        breakdownWithCache += `- Cache write: ${modelCachedTokens.toLocaleString()}t × $0.00/1M = $0.0000 (free)<br>`;
+                    }
+                    breakdownWithCache += `- Output: ${values.output.toLocaleString()}t × $${(outputCostPerToken * 1_000_000).toFixed(2)}/1M = $${(values.output * outputCostPerToken).toFixed(4)}<br>`;
+                    breakdownWithCache += `= $${modelFirstAttempt.toFixed(4)}<br>`;
+
+                    if (timesToSample > 1) {
+                        breakdownWithCache += `<span style="font-size: 9px;">Later attempts (×${timesToSample - 1}):</span><br>`;
+                        if (inputCacheRead) {
+                            breakdownWithCache += `- Uncached: ${modelUncachedTokens.toLocaleString()}t × $${(inputCostPerToken * 1_000_000).toFixed(2)}/1M = $${(modelUncachedTokens * inputCostPerToken).toFixed(4)}<br>`;
+                            breakdownWithCache += `- Cache read: ${modelCachedTokens.toLocaleString()}t × $${(inputCacheRead * 1_000_000).toFixed(2)}/1M = $${(modelCachedTokens * inputCacheRead).toFixed(4)}<br>`;
+                        } else {
+                            breakdownWithCache += `- Input: ${values.input.toLocaleString()}t × $${(inputCostPerToken * 1_000_000).toFixed(2)}/1M = $${(values.input * inputCostPerToken).toFixed(4)}<br>`;
+                        }
+                        breakdownWithCache += `- Output: ${values.output.toLocaleString()}t × $${(outputCostPerToken * 1_000_000).toFixed(2)}/1M = $${(values.output * outputCostPerToken).toFixed(4)}<br>`;
+                        breakdownWithCache += `= $${modelLaterAttempt.toFixed(4)} × ${timesToSample - 1}<br>`;
+                    }
+
+                    breakdownWithCache += `<br><strong>Judge Response:</strong><br>`;
+                    if (judgeInputCacheRead) {
+                        // Judge has cache read support - show cached breakdown
+                        breakdownWithCache += `<span style="font-size: 9px;">All attempts (×${timesToSample}${numModels > 1 ? ` × ${numModels} models` : ''}):</span><br>`;
+                        breakdownWithCache += `- Uncached: ${judgeUncachedTokens.toLocaleString()}t × $${(judgeInputCost * 1_000_000).toFixed(2)}/1M = $${(judgeUncachedTokens * judgeInputCost).toFixed(4)}<br>`;
+                        breakdownWithCache += `- Cached (avg): ${judgeCachedTokens.toLocaleString()}t × $${(judgeInputCacheRead * 1_000_000).toFixed(2)}/1M = $${(judgeCachedTokens * judgeInputCacheRead).toFixed(4)}<br>`;
+                        breakdownWithCache += `- Output: ${judgeOutputTokens.toLocaleString()}t × $${(judgeOutputCost * 1_000_000).toFixed(2)}/1M = $${(judgeOutputTokens * judgeOutputCost).toFixed(4)}<br>`;
+                        breakdownWithCache += `= $${judgeFirstAttempt.toFixed(4)} × ${timesToSample}${numModels > 1 ? ` × ${numModels}` : ''}<br>`;
+                    } else {
+                        // Judge has no cache support - show regular cost per attempt
+                        breakdownWithCache += `<span style="font-size: 9px;">Per attempt (×${timesToSample}${numModels > 1 ? ` × ${numModels} models` : ''}):</span><br>`;
+                        breakdownWithCache += `- Input: ${judgeInputTokens.toLocaleString()}t × $${(judgeInputCost * 1_000_000).toFixed(2)}/1M = $${(judgeInputTokens * judgeInputCost).toFixed(4)}<br>`;
+                        breakdownWithCache += `- Output: ${judgeOutputTokens.toLocaleString()}t × $${(judgeOutputCost * 1_000_000).toFixed(2)}/1M = $${(judgeOutputTokens * judgeOutputCost).toFixed(4)}<br>`;
+                        breakdownWithCache += `= $${judgeNoCachePerAttempt.toFixed(4)} × ${timesToSample}${numModels > 1 ? ` × ${numModels}` : ''}<br>`;
+                    }
+
+                    breakdownWithCache += `<br><strong>Per request:</strong> $${withCacheCostPerRequest.toFixed(4)}<br>`;
+                    breakdownWithCache += `<strong>× ${numRequests.toLocaleString()} requests = $${withCacheTotalCost.toFixed(2)}</strong>`;
+                }
+
+                const breakdown = breakdownNoCache + breakdownWithCache;
 
                 gridHtml += `
                     <div class="result">
                         <div class="result-label">${percentile.toUpperCase()}</div>
-                        <div class="result-value">$${totalCost.toFixed(2)}</div>
-                        <div class="result-breakdown">
-                            <div>In: ${values.input.toLocaleString()}t × $${(inputCostPerToken * 1_000_000).toFixed(2)}/1M = $${inputCost.toFixed(4)}</div>
-                            <div>Out: ${values.output.toLocaleString()}t × $${(outputCostPerToken * 1_000_000).toFixed(2)}/1M = $${outputCost.toFixed(4)}</div>
-                            <div>Constant: $${CONSTANT_VALUE.toFixed(2)}</div>
-                            <div style="margin-top: 5px; padding-top: 5px; border-top: 1px solid #ccc;">
-                                <strong>Per attempt:</strong> $${costPerAttempt.toFixed(4)}
+                        <div class="result-value" style="font-size: 18px; margin-bottom: 5px;">
+                            <div style="color: #666; font-size: 10px; font-weight: normal; margin-bottom: 3px;">WITHOUT CACHE</div>
+                            $${noCacheTotalCost.toFixed(2)}
+                        </div>
+                        ${hasCache ? `
+                            <div class="result-value" style="font-size: 18px; margin-bottom: 5px;">
+                                <div style="color: #666; font-size: 10px; font-weight: normal; margin-bottom: 3px;">WITH CACHE</div>
+                                $${withCacheTotalCost.toFixed(2)}
                             </div>
-                            <div><strong>× ${timesToSample} × ${numRequests.toLocaleString()} = $${totalCost.toFixed(2)}</strong></div>
+                            <div style="font-size: 11px; color: #000; margin-bottom: 8px; padding: 4px; background: #f0f0f0; border: 1px solid #ccc;">
+                                <strong>Savings:</strong> $${savings.toFixed(2)} (${savingsPercent.toFixed(1)}%)
+                            </div>
+                        ` : ''}
+                        <div class="result-breakdown">
+                            ${breakdown}
                         </div>
                     </div>
                 `;
@@ -654,6 +947,12 @@
 
         // Allow Enter key to trigger fetch
         document.getElementById('modelId').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                fetchPricing();
+            }
+        });
+
+        document.getElementById('judgeModelId').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 fetchPricing();
             }

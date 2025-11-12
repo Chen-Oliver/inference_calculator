@@ -1,0 +1,663 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Inference Cost Calculator</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            background: white;
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .calculator {
+            background: white;
+            border: 1px solid #000;
+            padding: 20px;
+            max-width: 1200px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #000;
+            margin-bottom: 3px;
+            font-size: 20px;
+            font-weight: 600;
+        }
+
+        .subtitle {
+            color: #666;
+            margin-bottom: 15px;
+            font-size: 12px;
+            font-weight: 400;
+        }
+
+        .section {
+            margin-bottom: 15px;
+        }
+
+        .config-section {
+            background: #f5f5f5;
+            border: 1px solid #000;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+
+        .config-inputs {
+            display: flex;
+            gap: 8px;
+            max-width: 420px;
+        }
+
+        .cost-inputs {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+        }
+
+        .cost-inputs > div {
+            flex: 1;
+        }
+
+        .config-inputs > div {
+            flex: 1;
+        }
+
+        .sections-row {
+            display: flex;
+            gap: 80px;
+            margin-bottom: 15px;
+            position: relative;
+            align-items: stretch;
+        }
+
+        .sections-row::before {
+            content: 'OR';
+            position: absolute;
+            left: 50%;
+            top: 50%;
+            transform: translate(-50%, -50%);
+            background: white;
+            padding: 6px 16px;
+            border: 1px solid #000;
+            font-size: 11px;
+            font-weight: 600;
+            z-index: 1;
+        }
+
+        .sections-row .section {
+            flex: 1;
+            margin-bottom: 0;
+            border: 1px solid #000;
+            padding: 15px;
+        }
+
+        .section-title {
+            color: #000;
+            font-size: 11px;
+            font-weight: 600;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        .input-group {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+
+        input, select, textarea {
+            flex: 1;
+            padding: 6px 8px;
+            border: 1px solid #000;
+            font-size: 13px;
+            background: white;
+        }
+
+        select {
+            cursor: pointer;
+            width: 100%;
+        }
+
+        textarea {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, sans-serif;
+            resize: vertical;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            background: #f5f5f5;
+        }
+
+        button {
+            padding: 6px 12px;
+            background: #000;
+            color: white;
+            border: 1px solid #000;
+            font-size: 12px;
+            font-weight: 500;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: white;
+            color: #000;
+        }
+
+        button:disabled {
+            background: #ccc;
+            border-color: #ccc;
+            cursor: not-allowed;
+        }
+
+        .divider {
+            text-align: center;
+            margin: 12px 0;
+            color: #666;
+            font-size: 11px;
+            position: relative;
+        }
+
+        .divider::before,
+        .divider::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            width: 40%;
+            height: 1px;
+            background: #000;
+        }
+
+        .divider::before {
+            left: 0;
+        }
+
+        .divider::after {
+            right: 0;
+        }
+
+        #result {
+            margin-top: 15px;
+        }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .result {
+            background: white;
+            border: 1px solid #000;
+            padding: 10px;
+            text-align: center;
+        }
+
+        .result-label {
+            color: #666;
+            font-size: 10px;
+            margin-bottom: 5px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+
+        .result-value {
+            color: #000;
+            font-size: 24px;
+            font-weight: 600;
+        }
+
+        .result-breakdown {
+            margin-top: 10px;
+            padding-top: 10px;
+            border-top: 1px solid #000;
+            font-size: 10px;
+            color: #000;
+            text-align: left;
+        }
+
+        .result-breakdown div {
+            margin: 3px 0;
+        }
+
+        .error {
+            background: white;
+            color: #000;
+            border: 1px solid #000;
+            padding: 10px;
+            font-size: 12px;
+            margin-top: 8px;
+        }
+
+        .info {
+            background: white;
+            color: #000;
+            border: 1px solid #000;
+            padding: 10px;
+            font-size: 12px;
+            margin-top: 8px;
+        }
+
+        .label {
+            display: block;
+            font-size: 11px;
+            color: #000;
+            margin-bottom: 4px;
+            margin-top: 6px;
+        }
+
+        .label input[type="checkbox"] {
+            width: auto;
+            margin: 0 4px 0 0;
+            vertical-align: middle;
+        }
+
+        .selected-models-list {
+            max-height: 120px;
+            overflow-y: auto;
+            border: 1px solid #000;
+            padding: 6px;
+            min-height: 40px;
+            background: #f9f9f9;
+        }
+
+        .model-item {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 4px;
+            border-bottom: 1px solid #ddd;
+            font-size: 11px;
+        }
+
+        .model-item:last-child {
+            border-bottom: none;
+        }
+
+        .model-item span {
+            flex: 1;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            white-space: nowrap;
+        }
+
+        .model-item button {
+            width: auto;
+            padding: 2px 8px;
+            margin: 0;
+            margin-left: 8px;
+            font-size: 10px;
+            background: #fff;
+            color: #000;
+        }
+
+        .model-item button:hover {
+            background: #000;
+            color: #fff;
+        }
+    </style>
+</head>
+<body>
+    <div class="calculator">
+        <h1>Inference Cost Calculator</h1>
+        <p class="subtitle">Calculate per-request inference costs</p>
+
+        <div class="config-section">
+            <div class="section-title">Shared Configuration</div>
+            <div class="config-inputs">
+                <div>
+                    <label class="label">Number of requests</label>
+                    <input
+                        type="number"
+                        id="numRequests"
+                        value="107"
+                        min="1"
+                        step="1"
+                        required
+                    >
+                </div>
+                <div>
+                    <label class="label">Times to sample (per request)</label>
+                    <input
+                        type="number"
+                        id="timesToSample"
+                        value="3"
+                        min="1"
+                        step="1"
+                        required
+                    >
+                </div>
+            </div>
+        </div>
+
+        <div class="sections-row">
+            <div class="section">
+                <div class="section-title">Option 1: Select Model</div>
+                <label class="label">
+                    <input type="checkbox" id="multiModelMode" onchange="toggleMultiModelMode()">
+                    Multiple models (sum costs)
+                </label>
+                <div id="singleModelInput">
+                    <label class="label">Model ID</label>
+                    <input
+                        type="text"
+                        id="modelId"
+                        placeholder="Start typing model name..."
+                        value="openai/gpt-4o"
+                        list="modelList"
+                        autocomplete="off"
+                        style="width: 100%;"
+                    >
+                    <datalist id="modelList"></datalist>
+                </div>
+                <div id="multiModelInput" style="display: none;">
+                    <label class="label">Add models</label>
+                    <div style="display: flex; gap: 8px; margin-bottom: 8px;">
+                        <input
+                            type="text"
+                            id="multiModelInput_field"
+                            placeholder="Start typing model name..."
+                            list="modelList"
+                            autocomplete="off"
+                            style="flex: 1;"
+                            onkeypress="if(event.key==='Enter'){event.preventDefault();addModel();}"
+                        >
+                        <button type="button" onclick="addModel()" style="width: auto; padding: 6px 16px; margin: 0;">Add</button>
+                    </div>
+                    <div id="selectedModels" class="selected-models-list">
+                        <div style="font-size: 11px; color: #666;">No models selected</div>
+                    </div>
+                </div>
+                <button onclick="fetchPricing()" style="width: 100%; margin-top: 12px;">Calculate</button>
+            </div>
+
+            <div class="section">
+                <div class="section-title">Option 2: Manual Input</div>
+                <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+                    <div style="flex: 1;">
+                        <label class="label">Input cost per 1M tokens ($)</label>
+                        <input
+                            type="number"
+                            id="inputCost"
+                            placeholder="e.g., 2.50"
+                            value="2.50"
+                            min="0.01"
+                            step="0.01"
+                            required
+                        >
+                    </div>
+                    <div style="flex: 1;">
+                        <label class="label">Output cost per 1M tokens ($)</label>
+                        <input
+                            type="number"
+                            id="outputCost"
+                            placeholder="e.g., 10.00"
+                            value="10.00"
+                            min="0.01"
+                            step="0.01"
+                            required
+                        >
+                    </div>
+                </div>
+                <button onclick="calculateManual()" style="width: 100%;">Calculate</button>
+            </div>
+        </div>
+
+        <div id="result"></div>
+    </div>
+
+    <script>
+        // Cached OpenRouter models data
+        const MODELS_CACHE = {"kwaipilot/kat-coder-pro:free": {"name": "Kwaipilot: KAT-Coder-Pro V1 (free)", "prompt": "0", "completion": "0"}, "moonshotai/kimi-linear-48b-a3b-instruct": {"name": "MoonshotAI: Kimi Linear 48B A3B Instruct", "prompt": "0.0000003", "completion": "0.0000006"}, "openrouter/polaris-alpha": {"name": "Polaris Alpha", "prompt": "0", "completion": "0"}, "moonshotai/kimi-k2-thinking": {"name": "MoonshotAI: Kimi K2 Thinking", "prompt": "0.00000055", "completion": "0.00000225"}, "amazon/nova-premier-v1": {"name": "Amazon: Nova Premier 1.0", "prompt": "0.0000025", "completion": "0.0000125"}, "perplexity/sonar-pro-search": {"name": "Perplexity: Sonar Pro Search", "prompt": "0.000003", "completion": "0.000015"}, "mistralai/voxtral-small-24b-2507": {"name": "Mistral: Voxtral Small 24B 2507", "prompt": "0.0000001", "completion": "0.0000003"}, "openai/gpt-oss-safeguard-20b": {"name": "OpenAI: gpt-oss-safeguard-20b", "prompt": "0.000000075", "completion": "0.0000003"}, "nvidia/nemotron-nano-12b-v2-vl:free": {"name": "NVIDIA: Nemotron Nano 12B 2 VL (free)", "prompt": "0", "completion": "0"}, "nvidia/nemotron-nano-12b-v2-vl": {"name": "NVIDIA: Nemotron Nano 12B 2 VL", "prompt": "0.0000002", "completion": "0.0000006"}, "minimax/minimax-m2": {"name": "MiniMax: MiniMax M2", "prompt": "0.000000255", "completion": "0.00000102"}, "liquid/lfm2-8b-a1b": {"name": "LiquidAI/LFM2-8B-A1B", "prompt": "0.00000005", "completion": "0.0000001"}, "liquid/lfm-2.2-6b": {"name": "LiquidAI/LFM2-2.6B", "prompt": "0.00000005", "completion": "0.0000001"}, "ibm-granite/granite-4.0-h-micro": {"name": "IBM: Granite 4.0 Micro", "prompt": "0.000000017", "completion": "0.00000011"}, "deepcogito/cogito-v2-preview-llama-405b": {"name": "Deep Cogito: Cogito V2 Preview Llama 405B", "prompt": "0.0000035", "completion": "0.0000035"}, "openai/gpt-5-image-mini": {"name": "OpenAI: GPT-5 Image Mini", "prompt": "0.0000025", "completion": "0.000002"}, "anthropic/claude-haiku-4.5": {"name": "Anthropic: Claude Haiku 4.5", "prompt": "0.000001", "completion": "0.000005"}, "qwen/qwen3-vl-8b-thinking": {"name": "Qwen: Qwen3 VL 8B Thinking", "prompt": "0.00000018", "completion": "0.0000021"}, "qwen/qwen3-vl-8b-instruct": {"name": "Qwen: Qwen3 VL 8B Instruct", "prompt": "0.00000008", "completion": "0.0000005"}, "openai/gpt-5-image": {"name": "OpenAI: GPT-5 Image", "prompt": "0.00001", "completion": "0.00001"}, "inclusionai/ring-1t": {"name": "inclusionAI: Ring 1T", "prompt": "0.00000057", "completion": "0.00000228"}, "inclusionai/ling-1t": {"name": "inclusionAI: Ling-1T", "prompt": "0.00000057", "completion": "0.00000228"}, "openai/o3-deep-research": {"name": "OpenAI: o3 Deep Research", "prompt": "0.00001", "completion": "0.00004"}, "openai/o4-mini-deep-research": {"name": "OpenAI: o4 Mini Deep Research", "prompt": "0.000002", "completion": "0.000008"}, "nvidia/llama-3.3-nemotron-super-49b-v1.5": {"name": "NVIDIA: Llama 3.3 Nemotron Super 49B V1.5", "prompt": "0.0000001", "completion": "0.0000004"}, "baidu/ernie-4.5-21b-a3b-thinking": {"name": "Baidu: ERNIE 4.5 21B A3B Thinking", "prompt": "0.00000007", "completion": "0.00000028"}, "google/gemini-2.5-flash-image": {"name": "Google: Gemini 2.5 Flash Image (Nano Banana)", "prompt": "0.0000003", "completion": "0.0000025"}, "qwen/qwen3-vl-30b-a3b-thinking": {"name": "Qwen: Qwen3 VL 30B A3B Thinking", "prompt": "0.0000002", "completion": "0.000001"}, "qwen/qwen3-vl-30b-a3b-instruct": {"name": "Qwen: Qwen3 VL 30B A3B Instruct", "prompt": "0.00000015", "completion": "0.0000006"}, "openai/gpt-5-pro": {"name": "OpenAI: GPT-5 Pro", "prompt": "0.000015", "completion": "0.00012"}, "z-ai/glm-4.6": {"name": "Z.AI: GLM 4.6", "prompt": "0.0000004", "completion": "0.00000175"}, "z-ai/glm-4.6:exacto": {"name": "Z.AI: GLM 4.6 (exacto)", "prompt": "0.00000045", "completion": "0.0000019"}, "anthropic/claude-sonnet-4.5": {"name": "Anthropic: Claude Sonnet 4.5", "prompt": "0.000003", "completion": "0.000015"}, "deepseek/deepseek-v3.2-exp": {"name": "DeepSeek: DeepSeek V3.2 Exp", "prompt": "0.00000027", "completion": "0.0000004"}, "thedrummer/cydonia-24b-v4.1": {"name": "TheDrummer: Cydonia 24B V4.1", "prompt": "0.0000003", "completion": "0.0000005"}, "relace/relace-apply-3": {"name": "Relace: Relace Apply 3", "prompt": "0.00000085", "completion": "0.00000125"}, "google/gemini-2.5-flash-preview-09-2025": {"name": "Google: Gemini 2.5 Flash Preview 09-2025", "prompt": "0.0000003", "completion": "0.0000025"}, "google/gemini-2.5-flash-lite-preview-09-2025": {"name": "Google: Gemini 2.5 Flash Lite Preview 09-2025", "prompt": "0.0000001", "completion": "0.0000004"}, "qwen/qwen3-vl-235b-a22b-thinking": {"name": "Qwen: Qwen3 VL 235B A22B Thinking", "prompt": "0.0000003", "completion": "0.0000012"}, "qwen/qwen3-vl-235b-a22b-instruct": {"name": "Qwen: Qwen3 VL 235B A22B Instruct", "prompt": "0.00000022", "completion": "0.00000088"}, "qwen/qwen3-max": {"name": "Qwen: Qwen3 Max", "prompt": "0.0000012", "completion": "0.000006"}, "qwen/qwen3-coder-plus": {"name": "Qwen: Qwen3 Coder Plus", "prompt": "0.000001", "completion": "0.000005"}, "openai/gpt-5-codex": {"name": "OpenAI: GPT-5 Codex", "prompt": "0.00000125", "completion": "0.00001"}, "deepseek/deepseek-v3.1-terminus": {"name": "DeepSeek: DeepSeek V3.1 Terminus", "prompt": "0.00000023", "completion": "0.0000009"}, "deepseek/deepseek-v3.1-terminus:exacto": {"name": "DeepSeek: DeepSeek V3.1 Terminus (exacto)", "prompt": "0.00000027", "completion": "0.000001"}, "x-ai/grok-4-fast": {"name": "xAI: Grok 4 Fast", "prompt": "0.0000002", "completion": "0.0000005"}, "alibaba/tongyi-deepresearch-30b-a3b:free": {"name": "Tongyi DeepResearch 30B A3B (free)", "prompt": "0", "completion": "0"}, "alibaba/tongyi-deepresearch-30b-a3b": {"name": "Tongyi DeepResearch 30B A3B", "prompt": "0.00000009", "completion": "0.0000004"}, "qwen/qwen3-coder-flash": {"name": "Qwen: Qwen3 Coder Flash", "prompt": "0.0000003", "completion": "0.0000015"}, "arcee-ai/afm-4.5b": {"name": "Arcee AI: AFM 4.5B", "prompt": "0.000000048", "completion": "0.00000015"}, "opengvlab/internvl3-78b": {"name": "OpenGVLab: InternVL3 78B", "prompt": "0.00000007", "completion": "0.00000026"}, "qwen/qwen3-next-80b-a3b-thinking": {"name": "Qwen: Qwen3 Next 80B A3B Thinking", "prompt": "0.00000015", "completion": "0.0000012"}, "qwen/qwen3-next-80b-a3b-instruct": {"name": "Qwen: Qwen3 Next 80B A3B Instruct", "prompt": "0.0000001", "completion": "0.0000008"}, "meituan/longcat-flash-chat:free": {"name": "Meituan: LongCat Flash Chat (free)", "prompt": "0", "completion": "0"}, "meituan/longcat-flash-chat": {"name": "Meituan: LongCat Flash Chat", "prompt": "0.00000015", "completion": "0.00000075"}, "qwen/qwen-plus-2025-07-28": {"name": "Qwen: Qwen Plus 0728", "prompt": "0.0000004", "completion": "0.0000012"}, "qwen/qwen-plus-2025-07-28:thinking": {"name": "Qwen: Qwen Plus 0728 (thinking)", "prompt": "0.0000004", "completion": "0.000004"}, "nvidia/nemotron-nano-9b-v2:free": {"name": "NVIDIA: Nemotron Nano 9B V2 (free)", "prompt": "0", "completion": "0"}, "nvidia/nemotron-nano-9b-v2": {"name": "NVIDIA: Nemotron Nano 9B V2", "prompt": "0.00000004", "completion": "0.00000016"}, "moonshotai/kimi-k2-0905": {"name": "MoonshotAI: Kimi K2 0905", "prompt": "0.00000039", "completion": "0.0000019"}, "moonshotai/kimi-k2-0905:exacto": {"name": "MoonshotAI: Kimi K2 0905 (exacto)", "prompt": "0.0000006", "completion": "0.0000025"}, "deepcogito/cogito-v2-preview-llama-70b": {"name": "Deep Cogito: Cogito V2 Preview Llama 70B", "prompt": "0.00000088", "completion": "0.00000088"}, "deepcogito/cogito-v2-preview-llama-109b-moe": {"name": "Cogito V2 Preview Llama 109B", "prompt": "0.00000018", "completion": "0.00000059"}, "deepcogito/cogito-v2-preview-deepseek-671b": {"name": "Deep Cogito: Cogito V2 Preview Deepseek 671B", "prompt": "0.00000125", "completion": "0.00000125"}, "stepfun-ai/step3": {"name": "StepFun: Step3", "prompt": "0.00000057", "completion": "0.00000142"}, "qwen/qwen3-30b-a3b-thinking-2507": {"name": "Qwen: Qwen3 30B A3B Thinking 2507", "prompt": "0.00000009", "completion": "0.0000003"}, "x-ai/grok-code-fast-1": {"name": "xAI: Grok Code Fast 1", "prompt": "0.0000002", "completion": "0.0000015"}, "nousresearch/hermes-4-70b": {"name": "Nous: Hermes 4 70B", "prompt": "0.00000011", "completion": "0.00000038"}, "nousresearch/hermes-4-405b": {"name": "Nous: Hermes 4 405B", "prompt": "0.0000003", "completion": "0.0000012"}, "google/gemini-2.5-flash-image-preview": {"name": "Google: Gemini 2.5 Flash Image Preview (Nano Banana)", "prompt": "0.0000003", "completion": "0.0000025"}, "deepseek/deepseek-chat-v3.1:free": {"name": "DeepSeek: DeepSeek V3.1 (free)", "prompt": "0", "completion": "0"}, "deepseek/deepseek-chat-v3.1": {"name": "DeepSeek: DeepSeek V3.1", "prompt": "0.0000002", "completion": "0.0000008"}, "openai/gpt-4o-audio-preview": {"name": "OpenAI: GPT-4o Audio", "prompt": "0.0000025", "completion": "0.00001"}, "mistralai/mistral-medium-3.1": {"name": "Mistral: Mistral Medium 3.1", "prompt": "0.0000004", "completion": "0.000002"}, "baidu/ernie-4.5-21b-a3b": {"name": "Baidu: ERNIE 4.5 21B A3B", "prompt": "0.00000007", "completion": "0.00000028"}, "baidu/ernie-4.5-vl-28b-a3b": {"name": "Baidu: ERNIE 4.5 VL 28B A3B", "prompt": "0.00000014", "completion": "0.00000056"}, "z-ai/glm-4.5v": {"name": "Z.AI: GLM 4.5V", "prompt": "0.0000006", "completion": "0.0000018"}, "ai21/jamba-mini-1.7": {"name": "AI21: Jamba Mini 1.7", "prompt": "0.0000002", "completion": "0.0000004"}, "ai21/jamba-large-1.7": {"name": "AI21: Jamba Large 1.7", "prompt": "0.000002", "completion": "0.000008"}, "openai/gpt-5-chat": {"name": "OpenAI: GPT-5 Chat", "prompt": "0.00000125", "completion": "0.00001"}, "openai/gpt-5": {"name": "OpenAI: GPT-5", "prompt": "0.00000125", "completion": "0.00001"}, "openai/gpt-5-mini": {"name": "OpenAI: GPT-5 Mini", "prompt": "0.00000025", "completion": "0.000002"}, "openai/gpt-5-nano": {"name": "OpenAI: GPT-5 Nano", "prompt": "0.00000005", "completion": "0.0000004"}, "openai/gpt-oss-120b": {"name": "OpenAI: gpt-oss-120b", "prompt": "0.00000004", "completion": "0.0000004"}, "openai/gpt-oss-120b:exacto": {"name": "OpenAI: gpt-oss-120b (exacto)", "prompt": "0.00000005", "completion": "0.00000024"}, "openai/gpt-oss-20b:free": {"name": "OpenAI: gpt-oss-20b (free)", "prompt": "0", "completion": "0"}, "openai/gpt-oss-20b": {"name": "OpenAI: gpt-oss-20b", "prompt": "0.00000003", "completion": "0.00000014"}, "anthropic/claude-opus-4.1": {"name": "Anthropic: Claude Opus 4.1", "prompt": "0.000015", "completion": "0.000075"}, "mistralai/codestral-2508": {"name": "Mistral: Codestral 2508", "prompt": "0.0000003", "completion": "0.0000009"}, "qwen/qwen3-coder-30b-a3b-instruct": {"name": "Qwen: Qwen3 Coder 30B A3B Instruct", "prompt": "0.00000006", "completion": "0.00000025"}, "qwen/qwen3-30b-a3b-instruct-2507": {"name": "Qwen: Qwen3 30B A3B Instruct 2507", "prompt": "0.00000008", "completion": "0.00000033"}, "z-ai/glm-4.5": {"name": "Z.AI: GLM 4.5", "prompt": "0.00000035", "completion": "0.00000155"}, "z-ai/glm-4.5-air:free": {"name": "Z.AI: GLM 4.5 Air (free)", "prompt": "0", "completion": "0"}, "z-ai/glm-4.5-air": {"name": "Z.AI: GLM 4.5 Air", "prompt": "0.00000013", "completion": "0.00000085"}, "qwen/qwen3-235b-a22b-thinking-2507": {"name": "Qwen: Qwen3 235B A22B Thinking 2507", "prompt": "0.00000011", "completion": "0.0000006"}, "z-ai/glm-4-32b": {"name": "Z.AI: GLM 4 32B ", "prompt": "0.0000001", "completion": "0.0000001"}, "qwen/qwen3-coder:free": {"name": "Qwen: Qwen3 Coder 480B A35B (free)", "prompt": "0", "completion": "0"}, "qwen/qwen3-coder": {"name": "Qwen: Qwen3 Coder 480B A35B", "prompt": "0.00000022", "completion": "0.00000095"}, "qwen/qwen3-coder:exacto": {"name": "Qwen: Qwen3 Coder 480B A35B (exacto)", "prompt": "0.00000038", "completion": "0.00000153"}, "bytedance/ui-tars-1.5-7b": {"name": "ByteDance: UI-TARS 7B ", "prompt": "0.0000001", "completion": "0.0000002"}, "google/gemini-2.5-flash-lite": {"name": "Google: Gemini 2.5 Flash Lite", "prompt": "0.0000001", "completion": "0.0000004"}, "qwen/qwen3-235b-a22b-2507": {"name": "Qwen: Qwen3 235B A22B Instruct 2507", "prompt": "0.00000008", "completion": "0.00000055"}, "switchpoint/router": {"name": "Switchpoint Router", "prompt": "0.00000085", "completion": "0.0000034"}, "moonshotai/kimi-k2:free": {"name": "MoonshotAI: Kimi K2 0711 (free)", "prompt": "0", "completion": "0"}, "moonshotai/kimi-k2": {"name": "MoonshotAI: Kimi K2 0711", "prompt": "0.0000005", "completion": "0.0000024"}, "thudm/glm-4.1v-9b-thinking": {"name": "THUDM: GLM 4.1V 9B Thinking", "prompt": "0.000000035", "completion": "0.000000138"}, "mistralai/devstral-medium": {"name": "Mistral: Devstral Medium", "prompt": "0.0000004", "completion": "0.000002"}, "mistralai/devstral-small": {"name": "Mistral: Devstral Small 1.1", "prompt": "0.00000007", "completion": "0.00000028"}, "cognitivecomputations/dolphin-mistral-24b-venice-edition:free": {"name": "Venice: Uncensored (free)", "prompt": "0", "completion": "0"}, "x-ai/grok-4": {"name": "xAI: Grok 4", "prompt": "0.000003", "completion": "0.000015"}, "google/gemma-3n-e2b-it:free": {"name": "Google: Gemma 3n 2B (free)", "prompt": "0", "completion": "0"}, "tencent/hunyuan-a13b-instruct": {"name": "Tencent: Hunyuan A13B Instruct", "prompt": "0.00000014", "completion": "0.00000057"}, "tngtech/deepseek-r1t2-chimera:free": {"name": "TNG: DeepSeek R1T2 Chimera (free)", "prompt": "0", "completion": "0"}, "tngtech/deepseek-r1t2-chimera": {"name": "TNG: DeepSeek R1T2 Chimera", "prompt": "0.0000003", "completion": "0.0000012"}, "morph/morph-v3-large": {"name": "Morph: Morph V3 Large", "prompt": "0.0000009", "completion": "0.0000019"}, "morph/morph-v3-fast": {"name": "Morph: Morph V3 Fast", "prompt": "0.0000008", "completion": "0.0000012"}, "baidu/ernie-4.5-vl-424b-a47b": {"name": "Baidu: ERNIE 4.5 VL 424B A47B ", "prompt": "0.00000042", "completion": "0.00000125"}, "baidu/ernie-4.5-300b-a47b": {"name": "Baidu: ERNIE 4.5 300B A47B ", "prompt": "0.00000028", "completion": "0.0000011"}, "thedrummer/anubis-70b-v1.1": {"name": "TheDrummer: Anubis 70B V1.1", "prompt": "0.00000065", "completion": "0.000001"}, "inception/mercury": {"name": "Inception: Mercury", "prompt": "0.00000025", "completion": "0.000001"}, "mistralai/mistral-small-3.2-24b-instruct:free": {"name": "Mistral: Mistral Small 3.2 24B (free)", "prompt": "0", "completion": "0"}, "mistralai/mistral-small-3.2-24b-instruct": {"name": "Mistral: Mistral Small 3.2 24B", "prompt": "0.00000006", "completion": "0.00000018"}, "minimax/minimax-m1": {"name": "MiniMax: MiniMax M1", "prompt": "0.0000004", "completion": "0.0000022"}, "google/gemini-2.5-flash-lite-preview-06-17": {"name": "Google: Gemini 2.5 Flash Lite Preview 06-17", "prompt": "0.0000001", "completion": "0.0000004"}, "google/gemini-2.5-flash": {"name": "Google: Gemini 2.5 Flash", "prompt": "0.0000003", "completion": "0.0000025"}, "google/gemini-2.5-pro": {"name": "Google: Gemini 2.5 Pro", "prompt": "0.00000125", "completion": "0.00001"}, "moonshotai/kimi-dev-72b": {"name": "MoonshotAI: Kimi Dev 72B", "prompt": "0.00000029", "completion": "0.00000115"}, "openai/o3-pro": {"name": "OpenAI: o3 Pro", "prompt": "0.00002", "completion": "0.00008"}, "x-ai/grok-3-mini": {"name": "xAI: Grok 3 Mini", "prompt": "0.0000003", "completion": "0.0000005"}, "x-ai/grok-3": {"name": "xAI: Grok 3", "prompt": "0.000003", "completion": "0.000015"}, "mistralai/magistral-small-2506": {"name": "Mistral: Magistral Small 2506", "prompt": "0.0000005", "completion": "0.0000015"}, "mistralai/magistral-medium-2506:thinking": {"name": "Mistral: Magistral Medium 2506 (thinking)", "prompt": "0.000002", "completion": "0.000005"}, "mistralai/magistral-medium-2506": {"name": "Mistral: Magistral Medium 2506", "prompt": "0.000002", "completion": "0.000005"}, "google/gemini-2.5-pro-preview": {"name": "Google: Gemini 2.5 Pro Preview 06-05", "prompt": "0.00000125", "completion": "0.00001"}, "deepseek/deepseek-r1-0528-qwen3-8b:free": {"name": "DeepSeek: DeepSeek R1 0528 Qwen3 8B (free)", "prompt": "0", "completion": "0"}, "deepseek/deepseek-r1-0528-qwen3-8b": {"name": "DeepSeek: DeepSeek R1 0528 Qwen3 8B", "prompt": "0.00000002", "completion": "0.0000001"}, "deepseek/deepseek-r1-0528:free": {"name": "DeepSeek: R1 0528 (free)", "prompt": "0", "completion": "0"}, "deepseek/deepseek-r1-0528": {"name": "DeepSeek: R1 0528", "prompt": "0.0000004", "completion": "0.00000175"}, "anthropic/claude-opus-4": {"name": "Anthropic: Claude Opus 4", "prompt": "0.000015", "completion": "0.000075"}, "anthropic/claude-sonnet-4": {"name": "Anthropic: Claude Sonnet 4", "prompt": "0.000003", "completion": "0.000015"}, "mistralai/devstral-small-2505": {"name": "Mistral: Devstral Small 2505", "prompt": "0.00000006", "completion": "0.00000012"}, "google/gemma-3n-e4b-it:free": {"name": "Google: Gemma 3n 4B (free)", "prompt": "0", "completion": "0"}, "google/gemma-3n-e4b-it": {"name": "Google: Gemma 3n 4B", "prompt": "0.00000002", "completion": "0.00000004"}, "openai/codex-mini": {"name": "OpenAI: Codex Mini", "prompt": "0.0000015", "completion": "0.000006"}, "meta-llama/llama-3.3-8b-instruct:free": {"name": "Meta: Llama 3.3 8B Instruct (free)", "prompt": "0", "completion": "0"}, "nousresearch/deephermes-3-mistral-24b-preview": {"name": "Nous: DeepHermes 3 Mistral 24B Preview", "prompt": "0.00000015", "completion": "0.00000059"}, "mistralai/mistral-medium-3": {"name": "Mistral: Mistral Medium 3", "prompt": "0.0000004", "completion": "0.000002"}, "google/gemini-2.5-pro-preview-05-06": {"name": "Google: Gemini 2.5 Pro Preview 05-06", "prompt": "0.00000125", "completion": "0.00001"}, "arcee-ai/spotlight": {"name": "Arcee AI: Spotlight", "prompt": "0.00000018", "completion": "0.00000018"}, "arcee-ai/maestro-reasoning": {"name": "Arcee AI: Maestro Reasoning", "prompt": "0.0000009", "completion": "0.0000033"}, "arcee-ai/virtuoso-large": {"name": "Arcee AI: Virtuoso Large", "prompt": "0.00000075", "completion": "0.0000012"}, "arcee-ai/coder-large": {"name": "Arcee AI: Coder Large", "prompt": "0.0000005", "completion": "0.0000008"}, "microsoft/phi-4-reasoning-plus": {"name": "Microsoft: Phi 4 Reasoning Plus", "prompt": "0.00000007", "completion": "0.00000035"}, "inception/mercury-coder": {"name": "Inception: Mercury Coder", "prompt": "0.00000025", "completion": "0.000001"}, "qwen/qwen3-4b:free": {"name": "Qwen: Qwen3 4B (free)", "prompt": "0", "completion": "0"}, "deepseek/deepseek-prover-v2": {"name": "DeepSeek: DeepSeek Prover V2", "prompt": "0.0000005", "completion": "0.00000218"}, "meta-llama/llama-guard-4-12b": {"name": "Meta: Llama Guard 4 12B", "prompt": "0.00000018", "completion": "0.00000018"}, "qwen/qwen3-30b-a3b:free": {"name": "Qwen: Qwen3 30B A3B (free)", "prompt": "0", "completion": "0"}, "qwen/qwen3-30b-a3b": {"name": "Qwen: Qwen3 30B A3B", "prompt": "0.00000006", "completion": "0.00000022"}, "qwen/qwen3-8b": {"name": "Qwen: Qwen3 8B", "prompt": "0.000000035", "completion": "0.000000138"}, "qwen/qwen3-14b:free": {"name": "Qwen: Qwen3 14B (free)", "prompt": "0", "completion": "0"}, "qwen/qwen3-14b": {"name": "Qwen: Qwen3 14B", "prompt": "0.00000005", "completion": "0.00000022"}, "qwen/qwen3-32b": {"name": "Qwen: Qwen3 32B", "prompt": "0.00000005", "completion": "0.0000002"}, "qwen/qwen3-235b-a22b:free": {"name": "Qwen: Qwen3 235B A22B (free)", "prompt": "0", "completion": "0"}, "qwen/qwen3-235b-a22b": {"name": "Qwen: Qwen3 235B A22B", "prompt": "0.00000018", "completion": "0.00000054"}, "tngtech/deepseek-r1t-chimera:free": {"name": "TNG: DeepSeek R1T Chimera (free)", "prompt": "0", "completion": "0"}, "tngtech/deepseek-r1t-chimera": {"name": "TNG: DeepSeek R1T Chimera", "prompt": "0.0000003", "completion": "0.0000012"}, "microsoft/mai-ds-r1:free": {"name": "Microsoft: MAI DS R1 (free)", "prompt": "0", "completion": "0"}, "microsoft/mai-ds-r1": {"name": "Microsoft: MAI DS R1", "prompt": "0.0000003", "completion": "0.0000012"}, "openai/o4-mini-high": {"name": "OpenAI: o4 Mini High", "prompt": "0.0000011", "completion": "0.0000044"}, "openai/o3": {"name": "OpenAI: o3", "prompt": "0.000002", "completion": "0.000008"}, "openai/o4-mini": {"name": "OpenAI: o4 Mini", "prompt": "0.0000011", "completion": "0.0000044"}, "qwen/qwen2.5-coder-7b-instruct": {"name": "Qwen: Qwen2.5 Coder 7B Instruct", "prompt": "0.00000003", "completion": "0.00000009"}, "openai/gpt-4.1": {"name": "OpenAI: GPT-4.1", "prompt": "0.000002", "completion": "0.000008"}, "openai/gpt-4.1-mini": {"name": "OpenAI: GPT-4.1 Mini", "prompt": "0.0000004", "completion": "0.0000016"}, "openai/gpt-4.1-nano": {"name": "OpenAI: GPT-4.1 Nano", "prompt": "0.0000001", "completion": "0.0000004"}, "eleutherai/llemma_7b": {"name": "EleutherAI: Llemma 7b", "prompt": "0.0000008", "completion": "0.0000012"}, "alfredpros/codellama-7b-instruct-solidity": {"name": "AlfredPros: CodeLLaMa 7B Instruct Solidity", "prompt": "0.0000008", "completion": "0.0000012"}, "arliai/qwq-32b-arliai-rpr-v1:free": {"name": "ArliAI: QwQ 32B RpR v1 (free)", "prompt": "0", "completion": "0"}, "arliai/qwq-32b-arliai-rpr-v1": {"name": "ArliAI: QwQ 32B RpR v1", "prompt": "0.00000003", "completion": "0.00000011"}, "agentica-org/deepcoder-14b-preview:free": {"name": "Agentica: Deepcoder 14B Preview (free)", "prompt": "0", "completion": "0"}, "agentica-org/deepcoder-14b-preview": {"name": "Agentica: Deepcoder 14B Preview", "prompt": "0.000000015", "completion": "0.000000015"}, "x-ai/grok-3-mini-beta": {"name": "xAI: Grok 3 Mini Beta", "prompt": "0.0000003", "completion": "0.0000005"}, "x-ai/grok-3-beta": {"name": "xAI: Grok 3 Beta", "prompt": "0.000003", "completion": "0.000015"}, "nvidia/llama-3.1-nemotron-ultra-253b-v1": {"name": "NVIDIA: Llama 3.1 Nemotron Ultra 253B v1", "prompt": "0.0000006", "completion": "0.0000018"}, "meta-llama/llama-4-maverick:free": {"name": "Meta: Llama 4 Maverick (free)", "prompt": "0", "completion": "0"}, "meta-llama/llama-4-maverick": {"name": "Meta: Llama 4 Maverick", "prompt": "0.00000015", "completion": "0.0000006"}, "meta-llama/llama-4-scout:free": {"name": "Meta: Llama 4 Scout (free)", "prompt": "0", "completion": "0"}, "meta-llama/llama-4-scout": {"name": "Meta: Llama 4 Scout", "prompt": "0.00000008", "completion": "0.0000003"}, "qwen/qwen2.5-vl-32b-instruct:free": {"name": "Qwen: Qwen2.5 VL 32B Instruct (free)", "prompt": "0", "completion": "0"}, "qwen/qwen2.5-vl-32b-instruct": {"name": "Qwen: Qwen2.5 VL 32B Instruct", "prompt": "0.00000005", "completion": "0.00000022"}, "deepseek/deepseek-chat-v3-0324:free": {"name": "DeepSeek: DeepSeek V3 0324 (free)", "prompt": "0", "completion": "0"}, "deepseek/deepseek-chat-v3-0324": {"name": "DeepSeek: DeepSeek V3 0324", "prompt": "0.00000024", "completion": "0.00000084"}, "openai/o1-pro": {"name": "OpenAI: o1-pro", "prompt": "0.00015", "completion": "0.0006"}, "mistralai/mistral-small-3.1-24b-instruct:free": {"name": "Mistral: Mistral Small 3.1 24B (free)", "prompt": "0", "completion": "0"}, "mistralai/mistral-small-3.1-24b-instruct": {"name": "Mistral: Mistral Small 3.1 24B", "prompt": "0.00000005", "completion": "0.00000022"}, "allenai/olmo-2-0325-32b-instruct": {"name": "AllenAI: Olmo 2 32B Instruct", "prompt": "0.0000002", "completion": "0.00000035"}, "google/gemma-3-4b-it:free": {"name": "Google: Gemma 3 4B (free)", "prompt": "0", "completion": "0"}, "google/gemma-3-4b-it": {"name": "Google: Gemma 3 4B", "prompt": "0.00000001703012", "completion": "0.0000000681536"}, "google/gemma-3-12b-it:free": {"name": "Google: Gemma 3 12B (free)", "prompt": "0", "completion": "0"}, "google/gemma-3-12b-it": {"name": "Google: Gemma 3 12B", "prompt": "0.00000003", "completion": "0.0000001"}, "cohere/command-a": {"name": "Cohere: Command A", "prompt": "0.0000025", "completion": "0.00001"}, "openai/gpt-4o-mini-search-preview": {"name": "OpenAI: GPT-4o-mini Search Preview", "prompt": "0.00000015", "completion": "0.0000006"}, "openai/gpt-4o-search-preview": {"name": "OpenAI: GPT-4o Search Preview", "prompt": "0.0000025", "completion": "0.00001"}, "google/gemma-3-27b-it:free": {"name": "Google: Gemma 3 27B (free)", "prompt": "0", "completion": "0"}, "google/gemma-3-27b-it": {"name": "Google: Gemma 3 27B", "prompt": "0.00000009", "completion": "0.00000016"}, "thedrummer/skyfall-36b-v2": {"name": "TheDrummer: Skyfall 36B V2", "prompt": "0.0000005", "completion": "0.0000008"}, "microsoft/phi-4-multimodal-instruct": {"name": "Microsoft: Phi 4 Multimodal Instruct", "prompt": "0.00000005", "completion": "0.0000001"}, "perplexity/sonar-reasoning-pro": {"name": "Perplexity: Sonar Reasoning Pro", "prompt": "0.000002", "completion": "0.000008"}, "perplexity/sonar-pro": {"name": "Perplexity: Sonar Pro", "prompt": "0.000003", "completion": "0.000015"}, "perplexity/sonar-deep-research": {"name": "Perplexity: Sonar Deep Research", "prompt": "0.000002", "completion": "0.000008"}, "qwen/qwq-32b": {"name": "Qwen: QwQ 32B", "prompt": "0.00000015", "completion": "0.0000004"}, "google/gemini-2.0-flash-lite-001": {"name": "Google: Gemini 2.0 Flash Lite", "prompt": "0.000000075", "completion": "0.0000003"}, "anthropic/claude-3.7-sonnet:thinking": {"name": "Anthropic: Claude 3.7 Sonnet (thinking)", "prompt": "0.000003", "completion": "0.000015"}, "anthropic/claude-3.7-sonnet": {"name": "Anthropic: Claude 3.7 Sonnet", "prompt": "0.000003", "completion": "0.000015"}, "mistralai/mistral-saba": {"name": "Mistral: Saba", "prompt": "0.0000002", "completion": "0.0000006"}, "meta-llama/llama-guard-3-8b": {"name": "Llama Guard 3 8B", "prompt": "0.00000002", "completion": "0.00000006"}, "openai/o3-mini-high": {"name": "OpenAI: o3 Mini High", "prompt": "0.0000011", "completion": "0.0000044"}, "google/gemini-2.0-flash-001": {"name": "Google: Gemini 2.0 Flash", "prompt": "0.0000001", "completion": "0.0000004"}, "qwen/qwen-vl-plus": {"name": "Qwen: Qwen VL Plus", "prompt": "0.00000021", "completion": "0.00000063"}, "aion-labs/aion-1.0": {"name": "AionLabs: Aion-1.0", "prompt": "0.000004", "completion": "0.000008"}, "aion-labs/aion-1.0-mini": {"name": "AionLabs: Aion-1.0-Mini", "prompt": "0.0000007", "completion": "0.0000014"}, "aion-labs/aion-rp-llama-3.1-8b": {"name": "AionLabs: Aion-RP 1.0 (8B)", "prompt": "0.0000002", "completion": "0.0000002"}, "qwen/qwen-vl-max": {"name": "Qwen: Qwen VL Max", "prompt": "0.0000008", "completion": "0.0000032"}, "qwen/qwen-turbo": {"name": "Qwen: Qwen-Turbo", "prompt": "0.00000005", "completion": "0.0000002"}, "qwen/qwen2.5-vl-72b-instruct": {"name": "Qwen: Qwen2.5 VL 72B Instruct", "prompt": "0.00000008", "completion": "0.00000033"}, "qwen/qwen-plus": {"name": "Qwen: Qwen-Plus", "prompt": "0.0000004", "completion": "0.0000012"}, "qwen/qwen-max": {"name": "Qwen: Qwen-Max ", "prompt": "0.0000016", "completion": "0.0000064"}, "openai/o3-mini": {"name": "OpenAI: o3 Mini", "prompt": "0.0000011", "completion": "0.0000044"}, "mistralai/mistral-small-24b-instruct-2501:free": {"name": "Mistral: Mistral Small 3 (free)", "prompt": "0", "completion": "0"}, "mistralai/mistral-small-24b-instruct-2501": {"name": "Mistral: Mistral Small 3", "prompt": "0.00000005", "completion": "0.00000008"}, "deepseek/deepseek-r1-distill-qwen-32b": {"name": "DeepSeek: R1 Distill Qwen 32B", "prompt": "0.00000027", "completion": "0.00000027"}, "deepseek/deepseek-r1-distill-qwen-14b": {"name": "DeepSeek: R1 Distill Qwen 14B", "prompt": "0.00000015", "completion": "0.00000015"}, "perplexity/sonar-reasoning": {"name": "Perplexity: Sonar Reasoning", "prompt": "0.000001", "completion": "0.000005"}, "perplexity/sonar": {"name": "Perplexity: Sonar", "prompt": "0.000001", "completion": "0.000001"}, "deepseek/deepseek-r1-distill-llama-70b:free": {"name": "DeepSeek: R1 Distill Llama 70B (free)", "prompt": "0", "completion": "0"}, "deepseek/deepseek-r1-distill-llama-70b": {"name": "DeepSeek: R1 Distill Llama 70B", "prompt": "0.00000003", "completion": "0.00000013"}, "deepseek/deepseek-r1:free": {"name": "DeepSeek: R1 (free)", "prompt": "0", "completion": "0"}, "deepseek/deepseek-r1": {"name": "DeepSeek: R1", "prompt": "0.0000003", "completion": "0.0000012"}, "minimax/minimax-01": {"name": "MiniMax: MiniMax-01", "prompt": "0.0000002", "completion": "0.0000011"}, "mistralai/codestral-2501": {"name": "Mistral: Codestral 2501", "prompt": "0.0000003", "completion": "0.0000009"}, "microsoft/phi-4": {"name": "Microsoft: Phi 4", "prompt": "0.00000006", "completion": "0.00000014"}, "sao10k/l3.1-70b-hanami-x1": {"name": "Sao10K: Llama 3.1 70B Hanami x1", "prompt": "0.000003", "completion": "0.000003"}, "deepseek/deepseek-chat": {"name": "DeepSeek: DeepSeek V3", "prompt": "0.0000003", "completion": "0.0000012"}, "sao10k/l3.3-euryale-70b": {"name": "Sao10K: Llama 3.3 Euryale 70B", "prompt": "0.00000065", "completion": "0.00000075"}, "openai/o1": {"name": "OpenAI: o1", "prompt": "0.000015", "completion": "0.00006"}, "cohere/command-r7b-12-2024": {"name": "Cohere: Command R7B (12-2024)", "prompt": "0.0000000375", "completion": "0.00000015"}, "google/gemini-2.0-flash-exp:free": {"name": "Google: Gemini 2.0 Flash Experimental (free)", "prompt": "0", "completion": "0"}, "meta-llama/llama-3.3-70b-instruct:free": {"name": "Meta: Llama 3.3 70B Instruct (free)", "prompt": "0", "completion": "0"}, "meta-llama/llama-3.3-70b-instruct": {"name": "Meta: Llama 3.3 70B Instruct", "prompt": "0.00000013", "completion": "0.00000038"}, "amazon/nova-lite-v1": {"name": "Amazon: Nova Lite 1.0", "prompt": "0.00000006", "completion": "0.00000024"}, "amazon/nova-micro-v1": {"name": "Amazon: Nova Micro 1.0", "prompt": "0.000000035", "completion": "0.00000014"}, "amazon/nova-pro-v1": {"name": "Amazon: Nova Pro 1.0", "prompt": "0.0000008", "completion": "0.0000032"}, "openai/gpt-4o-2024-11-20": {"name": "OpenAI: GPT-4o (2024-11-20)", "prompt": "0.0000025", "completion": "0.00001"}, "mistralai/mistral-large-2411": {"name": "Mistral Large 2411", "prompt": "0.000002", "completion": "0.000006"}, "mistralai/mistral-large-2407": {"name": "Mistral Large 2407", "prompt": "0.000002", "completion": "0.000006"}, "mistralai/pixtral-large-2411": {"name": "Mistral: Pixtral Large 2411", "prompt": "0.000002", "completion": "0.000006"}, "qwen/qwen-2.5-coder-32b-instruct:free": {"name": "Qwen2.5 Coder 32B Instruct (free)", "prompt": "0", "completion": "0"}, "qwen/qwen-2.5-coder-32b-instruct": {"name": "Qwen2.5 Coder 32B Instruct", "prompt": "0.00000004", "completion": "0.00000016"}, "raifle/sorcererlm-8x22b": {"name": "SorcererLM 8x22B", "prompt": "0.0000045", "completion": "0.0000045"}, "thedrummer/unslopnemo-12b": {"name": "TheDrummer: UnslopNemo 12B", "prompt": "0.0000004", "completion": "0.0000004"}, "anthropic/claude-3.5-haiku-20241022": {"name": "Anthropic: Claude 3.5 Haiku (2024-10-22)", "prompt": "0.0000008", "completion": "0.000004"}, "anthropic/claude-3.5-haiku": {"name": "Anthropic: Claude 3.5 Haiku", "prompt": "0.0000008", "completion": "0.000004"}, "anthracite-org/magnum-v4-72b": {"name": "Magnum v4 72B", "prompt": "0.000003", "completion": "0.000005"}, "anthropic/claude-3.5-sonnet": {"name": "Anthropic: Claude 3.5 Sonnet", "prompt": "0.000003", "completion": "0.000015"}, "mistralai/ministral-3b": {"name": "Mistral: Ministral 3B", "prompt": "0.00000004", "completion": "0.00000004"}, "mistralai/ministral-8b": {"name": "Mistral: Ministral 8B", "prompt": "0.0000001", "completion": "0.0000001"}, "qwen/qwen-2.5-7b-instruct": {"name": "Qwen: Qwen2.5 7B Instruct", "prompt": "0.00000004", "completion": "0.0000001"}, "nvidia/llama-3.1-nemotron-70b-instruct": {"name": "NVIDIA: Llama 3.1 Nemotron 70B Instruct", "prompt": "0.0000006", "completion": "0.0000006"}, "inflection/inflection-3-pi": {"name": "Inflection: Inflection 3 Pi", "prompt": "0.0000025", "completion": "0.00001"}, "inflection/inflection-3-productivity": {"name": "Inflection: Inflection 3 Productivity", "prompt": "0.0000025", "completion": "0.00001"}, "thedrummer/rocinante-12b": {"name": "TheDrummer: Rocinante 12B", "prompt": "0.00000017", "completion": "0.00000043"}, "meta-llama/llama-3.2-3b-instruct:free": {"name": "Meta: Llama 3.2 3B Instruct (free)", "prompt": "0", "completion": "0"}, "meta-llama/llama-3.2-3b-instruct": {"name": "Meta: Llama 3.2 3B Instruct", "prompt": "0.00000002", "completion": "0.00000002"}, "meta-llama/llama-3.2-90b-vision-instruct": {"name": "Meta: Llama 3.2 90B Vision Instruct", "prompt": "0.00000035", "completion": "0.0000004"}, "meta-llama/llama-3.2-11b-vision-instruct": {"name": "Meta: Llama 3.2 11B Vision Instruct", "prompt": "0.000000049", "completion": "0.000000049"}, "meta-llama/llama-3.2-1b-instruct": {"name": "Meta: Llama 3.2 1B Instruct", "prompt": "0.000000027", "completion": "0.0000002"}, "qwen/qwen-2.5-72b-instruct:free": {"name": "Qwen2.5 72B Instruct (free)", "prompt": "0", "completion": "0"}, "qwen/qwen-2.5-72b-instruct": {"name": "Qwen2.5 72B Instruct", "prompt": "0.00000007", "completion": "0.00000026"}, "neversleep/llama-3.1-lumimaid-8b": {"name": "NeverSleep: Lumimaid v0.2 8B", "prompt": "0.00000009", "completion": "0.0000006"}, "mistralai/pixtral-12b": {"name": "Mistral: Pixtral 12B", "prompt": "0.0000001", "completion": "0.0000001"}, "cohere/command-r-08-2024": {"name": "Cohere: Command R (08-2024)", "prompt": "0.00000015", "completion": "0.0000006"}, "cohere/command-r-plus-08-2024": {"name": "Cohere: Command R+ (08-2024)", "prompt": "0.0000025", "completion": "0.00001"}, "sao10k/l3.1-euryale-70b": {"name": "Sao10K: Llama 3.1 Euryale 70B v2.2", "prompt": "0.00000065", "completion": "0.00000075"}, "qwen/qwen-2.5-vl-7b-instruct": {"name": "Qwen: Qwen2.5-VL 7B Instruct", "prompt": "0.0000002", "completion": "0.0000002"}, "microsoft/phi-3.5-mini-128k-instruct": {"name": "Microsoft: Phi-3.5 Mini 128K Instruct", "prompt": "0.0000001", "completion": "0.0000001"}, "nousresearch/hermes-3-llama-3.1-70b": {"name": "Nous: Hermes 3 70B Instruct", "prompt": "0.0000003", "completion": "0.0000003"}, "nousresearch/hermes-3-llama-3.1-405b:free": {"name": "Nous: Hermes 3 405B Instruct (free)", "prompt": "0", "completion": "0"}, "nousresearch/hermes-3-llama-3.1-405b": {"name": "Nous: Hermes 3 405B Instruct", "prompt": "0.000001", "completion": "0.000001"}, "openai/chatgpt-4o-latest": {"name": "OpenAI: ChatGPT-4o", "prompt": "0.000005", "completion": "0.000015"}, "sao10k/l3-lunaris-8b": {"name": "Sao10K: Llama 3 8B Lunaris", "prompt": "0.00000004", "completion": "0.00000005"}, "openai/gpt-4o-2024-08-06": {"name": "OpenAI: GPT-4o (2024-08-06)", "prompt": "0.0000025", "completion": "0.00001"}, "meta-llama/llama-3.1-405b": {"name": "Meta: Llama 3.1 405B (base)", "prompt": "0.000004", "completion": "0.000004"}, "meta-llama/llama-3.1-405b-instruct": {"name": "Meta: Llama 3.1 405B Instruct", "prompt": "0.0000035", "completion": "0.0000035"}, "meta-llama/llama-3.1-70b-instruct": {"name": "Meta: Llama 3.1 70B Instruct", "prompt": "0.0000004", "completion": "0.0000004"}, "meta-llama/llama-3.1-8b-instruct": {"name": "Meta: Llama 3.1 8B Instruct", "prompt": "0.00000002", "completion": "0.00000003"}, "mistralai/mistral-nemo:free": {"name": "Mistral: Mistral Nemo (free)", "prompt": "0", "completion": "0"}, "mistralai/mistral-nemo": {"name": "Mistral: Mistral Nemo", "prompt": "0.00000002", "completion": "0.00000004"}, "openai/gpt-4o-mini": {"name": "OpenAI: GPT-4o-mini", "prompt": "0.00000015", "completion": "0.0000006"}, "openai/gpt-4o-mini-2024-07-18": {"name": "OpenAI: GPT-4o-mini (2024-07-18)", "prompt": "0.00000015", "completion": "0.0000006"}, "google/gemma-2-27b-it": {"name": "Google: Gemma 2 27B", "prompt": "0.00000065", "completion": "0.00000065"}, "google/gemma-2-9b-it": {"name": "Google: Gemma 2 9B", "prompt": "0.00000003", "completion": "0.00000009"}, "anthropic/claude-3.5-sonnet-20240620": {"name": "Anthropic: Claude 3.5 Sonnet (2024-06-20)", "prompt": "0.000003", "completion": "0.000015"}, "sao10k/l3-euryale-70b": {"name": "Sao10k: Llama 3 Euryale 70B v2.1", "prompt": "0.00000148", "completion": "0.00000148"}, "mistralai/mistral-7b-instruct-v0.3": {"name": "Mistral: Mistral 7B Instruct v0.3", "prompt": "0.0000002", "completion": "0.0000002"}, "nousresearch/hermes-2-pro-llama-3-8b": {"name": "NousResearch: Hermes 2 Pro - Llama-3 8B", "prompt": "0.000000025", "completion": "0.00000008"}, "mistralai/mistral-7b-instruct:free": {"name": "Mistral: Mistral 7B Instruct (free)", "prompt": "0", "completion": "0"}, "mistralai/mistral-7b-instruct": {"name": "Mistral: Mistral 7B Instruct", "prompt": "0.000000028", "completion": "0.000000054"}, "microsoft/phi-3-mini-128k-instruct": {"name": "Microsoft: Phi-3 Mini 128K Instruct", "prompt": "0.0000001", "completion": "0.0000001"}, "microsoft/phi-3-medium-128k-instruct": {"name": "Microsoft: Phi-3 Medium 128K Instruct", "prompt": "0.000001", "completion": "0.000001"}, "openai/gpt-4o-2024-05-13": {"name": "OpenAI: GPT-4o (2024-05-13)", "prompt": "0.000005", "completion": "0.000015"}, "openai/gpt-4o": {"name": "OpenAI: GPT-4o", "prompt": "0.0000025", "completion": "0.00001"}, "openai/gpt-4o:extended": {"name": "OpenAI: GPT-4o (extended)", "prompt": "0.000006", "completion": "0.000018"}, "meta-llama/llama-guard-2-8b": {"name": "Meta: LlamaGuard 2 8B", "prompt": "0.0000002", "completion": "0.0000002"}, "meta-llama/llama-3-70b-instruct": {"name": "Meta: Llama 3 70B Instruct", "prompt": "0.0000003", "completion": "0.0000004"}, "meta-llama/llama-3-8b-instruct": {"name": "Meta: Llama 3 8B Instruct", "prompt": "0.00000003", "completion": "0.00000006"}, "mistralai/mixtral-8x22b-instruct": {"name": "Mistral: Mixtral 8x22B Instruct", "prompt": "0.000002", "completion": "0.000006"}, "microsoft/wizardlm-2-8x22b": {"name": "WizardLM-2 8x22B", "prompt": "0.00000048", "completion": "0.00000048"}, "openai/gpt-4-turbo": {"name": "OpenAI: GPT-4 Turbo", "prompt": "0.00001", "completion": "0.00003"}, "anthropic/claude-3-haiku": {"name": "Anthropic: Claude 3 Haiku", "prompt": "0.00000025", "completion": "0.00000125"}, "anthropic/claude-3-opus": {"name": "Anthropic: Claude 3 Opus", "prompt": "0.000015", "completion": "0.000075"}, "mistralai/mistral-large": {"name": "Mistral Large", "prompt": "0.000002", "completion": "0.000006"}, "openai/gpt-3.5-turbo-0613": {"name": "OpenAI: GPT-3.5 Turbo (older v0613)", "prompt": "0.000001", "completion": "0.000002"}, "openai/gpt-4-turbo-preview": {"name": "OpenAI: GPT-4 Turbo Preview", "prompt": "0.00001", "completion": "0.00003"}, "mistralai/mistral-small": {"name": "Mistral Small", "prompt": "0.0000002", "completion": "0.0000006"}, "mistralai/mistral-tiny": {"name": "Mistral Tiny", "prompt": "0.00000025", "completion": "0.00000025"}, "mistralai/mistral-7b-instruct-v0.2": {"name": "Mistral: Mistral 7B Instruct v0.2", "prompt": "0.0000002", "completion": "0.0000002"}, "mistralai/mixtral-8x7b-instruct": {"name": "Mistral: Mixtral 8x7B Instruct", "prompt": "0.00000054", "completion": "0.00000054"}, "neversleep/noromaid-20b": {"name": "Noromaid 20B", "prompt": "0.000001", "completion": "0.00000175"}, "alpindale/goliath-120b": {"name": "Goliath 120B", "prompt": "0.000006", "completion": "0.000008"}, "openrouter/auto": {"name": "Auto Router", "prompt": "-1", "completion": "-1"}, "openai/gpt-4-1106-preview": {"name": "OpenAI: GPT-4 Turbo (older v1106)", "prompt": "0.00001", "completion": "0.00003"}, "mistralai/mistral-7b-instruct-v0.1": {"name": "Mistral: Mistral 7B Instruct v0.1", "prompt": "0.00000011", "completion": "0.00000019"}, "openai/gpt-3.5-turbo-instruct": {"name": "OpenAI: GPT-3.5 Turbo Instruct", "prompt": "0.0000015", "completion": "0.000002"}, "openai/gpt-3.5-turbo-16k": {"name": "OpenAI: GPT-3.5 Turbo 16k", "prompt": "0.000003", "completion": "0.000004"}, "mancer/weaver": {"name": "Mancer: Weaver (alpha)", "prompt": "0.000001125", "completion": "0.000001125"}, "undi95/remm-slerp-l2-13b": {"name": "ReMM SLERP 13B", "prompt": "0.00000045", "completion": "0.00000065"}, "gryphe/mythomax-l2-13b": {"name": "MythoMax 13B", "prompt": "0.00000006", "completion": "0.00000006"}, "openai/gpt-4": {"name": "OpenAI: GPT-4", "prompt": "0.00003", "completion": "0.00006"}, "openai/gpt-3.5-turbo": {"name": "OpenAI: GPT-3.5 Turbo", "prompt": "0.0000005", "completion": "0.0000015"}, "openai/gpt-4-0314": {"name": "OpenAI: GPT-4 (older v0314)", "prompt": "0.00003", "completion": "0.00006"}}
+;
+
+        const PERCENTILE_VALUES = {
+            p90: {
+                input: 5253,
+                output: 1745
+            },
+            p95: {
+                input: 5288,
+                output: 2039
+            },
+            p96: {
+                input: 5294,
+                output: 2135
+            },
+            p97: {
+                input: 5300,
+                output: 2297
+            },
+            p98: {
+                input: 5310,
+                output: 2481
+            },
+            p99: {
+                input: 5323,
+                output: 2786
+            }
+        };
+
+        const CONSTANT_VALUE = 0.006;
+
+        // Populate datalist with all models on page load
+        window.addEventListener('DOMContentLoaded', () => {
+            const datalist = document.getElementById('modelList');
+            Object.entries(MODELS_CACHE).forEach(([id, model]) => {
+                const option = document.createElement('option');
+                option.value = id;
+                option.textContent = `${model.name} - ${id}`;
+                datalist.appendChild(option);
+            });
+        });
+
+        let selectedModels = [];
+
+        function toggleMultiModelMode() {
+            const isMulti = document.getElementById('multiModelMode').checked;
+            document.getElementById('singleModelInput').style.display = isMulti ? 'none' : 'block';
+            document.getElementById('multiModelInput').style.display = isMulti ? 'block' : 'none';
+            if (isMulti) {
+                updateSelectedModelsList();
+            }
+        }
+
+        function addModel() {
+            const input = document.getElementById('multiModelInput_field');
+            const modelId = input.value.trim();
+
+            if (!modelId) {
+                return;
+            }
+
+            const model = MODELS_CACHE[modelId];
+            if (!model) {
+                alert(`Model "${modelId}" not found. Please select a valid model from autocomplete.`);
+                return;
+            }
+
+            if (selectedModels.includes(modelId)) {
+                alert(`Model "${modelId}" is already added.`);
+                return;
+            }
+
+            selectedModels.push(modelId);
+            input.value = '';
+            updateSelectedModelsList();
+        }
+
+        function removeModel(modelId) {
+            selectedModels = selectedModels.filter(id => id !== modelId);
+            updateSelectedModelsList();
+        }
+
+        function updateSelectedModelsList() {
+            const container = document.getElementById('selectedModels');
+
+            if (selectedModels.length === 0) {
+                container.innerHTML = '<div style="font-size: 11px; color: #666;">No models selected</div>';
+                return;
+            }
+
+            let html = '';
+            selectedModels.forEach(modelId => {
+                const model = MODELS_CACHE[modelId];
+                html += `
+                    <div class="model-item">
+                        <span title="${model.name}">${model.name}</span>
+                        <button type="button" onclick="removeModel('${modelId.replace(/'/g, "\\'")}')">Remove</button>
+                    </div>
+                `;
+            });
+            container.innerHTML = html;
+        }
+
+        function fetchPricing() {
+            const resultDiv = document.getElementById('result');
+            const isMulti = document.getElementById('multiModelMode').checked;
+
+            if (isMulti) {
+                // Multiple models mode
+                if (selectedModels.length === 0) {
+                    resultDiv.innerHTML = '<div class="error">Please add at least one model</div>';
+                    return;
+                }
+
+                let totalInputCost = 0;
+                let totalOutputCost = 0;
+                const modelDetails = [];
+
+                for (const modelId of selectedModels) {
+                    const model = MODELS_CACHE[modelId];
+                    const inputCost = parseFloat(model.prompt);
+                    const outputCost = parseFloat(model.completion);
+
+                    totalInputCost += inputCost;
+                    totalOutputCost += outputCost;
+                    modelDetails.push({ name: model.name, inputCost, outputCost });
+                }
+
+                const modelNamesList = modelDetails.map(m => m.name).join(', ');
+                calculateCost(totalInputCost, totalOutputCost, `Multiple Models (${modelDetails.length}): ${modelNamesList}`);
+            } else {
+                // Single model mode
+                const modelId = document.getElementById('modelId').value.trim();
+
+                if (!modelId) {
+                    resultDiv.innerHTML = '<div class="error">Please enter a model ID</div>';
+                    return;
+                }
+
+                const model = MODELS_CACHE[modelId];
+
+                if (!model) {
+                    resultDiv.innerHTML = `<div class="error">Model "${modelId}" not found. Try typing to see autocomplete suggestions.</div>`;
+                    return;
+                }
+
+                const inputCostPerToken = parseFloat(model.prompt);
+                const outputCostPerToken = parseFloat(model.completion);
+
+                if (inputCostPerToken < 0 || outputCostPerToken < 0) {
+                    resultDiv.innerHTML = '<div class="error">Invalid pricing data for this model</div>';
+                    return;
+                }
+
+                calculateCost(inputCostPerToken, outputCostPerToken, model.name);
+            }
+        }
+
+        function calculateManual() {
+            const inputCostPer1M = parseFloat(document.getElementById('inputCost').value);
+            const outputCostPer1M = parseFloat(document.getElementById('outputCost').value);
+            const resultDiv = document.getElementById('result');
+
+            if (isNaN(inputCostPer1M) || isNaN(outputCostPer1M)) {
+                resultDiv.innerHTML = '<div class="error">Please enter valid numbers for both costs</div>';
+                return;
+            }
+
+            if (inputCostPer1M <= 0 || outputCostPer1M <= 0) {
+                resultDiv.innerHTML = '<div class="error">Costs must be greater than zero</div>';
+                return;
+            }
+
+            const inputCostPerToken = inputCostPer1M / 1_000_000;
+            const outputCostPerToken = outputCostPer1M / 1_000_000;
+
+            calculateCost(inputCostPerToken, outputCostPerToken);
+        }
+
+        function calculateCost(inputCostPerToken, outputCostPerToken, modelName = null) {
+            const numRequests = parseInt(document.getElementById('numRequests').value) || 1;
+            const timesToSample = parseInt(document.getElementById('timesToSample').value) || 1;
+
+            const resultDiv = document.getElementById('result');
+
+            if (numRequests < 1 || timesToSample < 1) {
+                resultDiv.innerHTML = '<div class="error">Number of requests and times to sample must be at least 1</div>';
+                return;
+            }
+            let headerHtml = '';
+            let gridHtml = '';
+
+            // Add header info
+            if (modelName) {
+                headerHtml += `<div style="font-size: 12px; color: #666; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #000;"><strong>${modelName}</strong></div>`;
+            }
+
+            headerHtml += `<div style="font-size: 11px; color: #666; margin-bottom: 10px;">
+                Input: $${(inputCostPerToken * 1_000_000).toFixed(2)}/1M tokens |
+                Output: $${(outputCostPerToken * 1_000_000).toFixed(2)}/1M tokens
+            </div>`;
+
+            // Calculate for all percentiles
+            Object.entries(PERCENTILE_VALUES).forEach(([percentile, values]) => {
+                const inputCost = inputCostPerToken * values.input;
+                const outputCost = outputCostPerToken * values.output;
+                const costPerAttempt = inputCost + outputCost + CONSTANT_VALUE;
+                const costPerRequest = costPerAttempt * timesToSample;
+                const totalCost = costPerRequest * numRequests;
+
+                gridHtml += `
+                    <div class="result">
+                        <div class="result-label">${percentile.toUpperCase()}</div>
+                        <div class="result-value">$${totalCost.toFixed(2)}</div>
+                        <div class="result-breakdown">
+                            <div>In: ${values.input.toLocaleString()}t × $${(inputCostPerToken * 1_000_000).toFixed(2)}/1M = $${inputCost.toFixed(4)}</div>
+                            <div>Out: ${values.output.toLocaleString()}t × $${(outputCostPerToken * 1_000_000).toFixed(2)}/1M = $${outputCost.toFixed(4)}</div>
+                            <div>Constant: $${CONSTANT_VALUE.toFixed(2)}</div>
+                            <div style="margin-top: 5px; padding-top: 5px; border-top: 1px solid #ccc;">
+                                <strong>Per attempt:</strong> $${costPerAttempt.toFixed(4)}
+                            </div>
+                            <div><strong>× ${timesToSample} × ${numRequests.toLocaleString()} = $${totalCost.toFixed(2)}</strong></div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            resultDiv.innerHTML = headerHtml + '<div class="results-grid">' + gridHtml + '</div>';
+        }
+
+        // Allow Enter key to trigger fetch
+        document.getElementById('modelId').addEventListener('keypress', function(e) {
+            if (e.key === 'Enter') {
+                fetchPricing();
+            }
+        });
+    </script>
+</body>
+</html>

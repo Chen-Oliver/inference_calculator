@@ -358,6 +358,12 @@
                     >
                     <datalist id="judgeModelList"></datalist>
                 </div>
+                <div style="margin-top: 12px;">
+                    <label class="label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
+                        <input type="checkbox" id="ignoreAnthropicCache">
+                        <span>Ignore Anthropic/Claude cache pricing (cache writes are costly and off by default)</span>
+                    </label>
+                </div>
             </div>
         </div>
 
@@ -410,8 +416,9 @@
                         <input
                             type="number"
                             id="inputCost"
-                            placeholder="e.g., 2.50"
+                            placeholder="e.g., 3.00"
                             step="0.01"
+                            value="3.00"
                         >
                     </div>
                     <div style="flex: 1;">
@@ -419,8 +426,31 @@
                         <input
                             type="number"
                             id="outputCost"
-                            placeholder="e.g., 10.00"
+                            placeholder="e.g., 15.00"
                             step="0.01"
+                            value="15.00"
+                        >
+                    </div>
+                </div>
+                <div style="display: flex; gap: 12px; margin-bottom: 12px;">
+                    <div style="flex: 1;">
+                        <label class="label">Cache Read cost per 1M tokens ($)</label>
+                        <input
+                            type="number"
+                            id="inputCacheReadCost"
+                            placeholder="e.g., 0.30"
+                            step="0.01"
+                            value="0.30"
+                        >
+                    </div>
+                    <div style="flex: 1;">
+                        <label class="label">Cache Write cost per 1M tokens ($)</label>
+                        <input
+                            type="number"
+                            id="inputCacheWriteCost"
+                            placeholder="e.g., 3.75"
+                            step="0.01"
+                            value="3.75"
                         >
                     </div>
                 </div>
@@ -433,39 +463,44 @@
 
     <script src="model_pricing_data.js"></script>
     <script>
-        // Stats from custom_stats.json (fetched 2025-01-12)
-        // Using overall mean for cached tokens (already accounts for cache hit rate)
+        // Stats from custom_stats.json
         const STATS = {
             model: {
-                cachedTokens: 1771  // overall mean (includes cache misses)
+                // overall mean for cache reads (conservative - includes cache misses)
+                cachedTokensOverall: 1771,
+                // conditional mean for cache writes (actual amount written when write occurs)
+                cachedTokensConditional: 4363
             },
             judge: {
-                inputTokens: 8933,  // mean
-                outputTokens: 774,  // mean
-                cachedTokens: 5128  // overall mean (includes cache misses)
+                inputTokens: 8933,
+                outputTokens: 774,
+                // overall mean for cache reads (conservative - includes cache misses)
+                cachedTokensOverall: 5128,
+                // conditional mean for cache writes (actual amount written when write occurs)
+                cachedTokensConditional: 7509
             }
         };
 
         const PERCENTILE_VALUES = {
             mean: {
-                input: 4874,
-                output: 879
+                input: 4875,
+                output: 885
             },
             p50: {
                 input: 4787,
-                output: 635
+                output: 641
             },
             p75: {
                 input: 5039,
-                output: 1216
+                output: 1222
             },
             p90: {
-                input: 5250,
-                output: 1744
+                input: 5253,
+                output: 1745
             },
             p95: {
                 input: 5288,
-                output: 2038
+                output: 2039
             },
             // p96: {
             //     input: 5294,
@@ -473,7 +508,7 @@
             // },
             // p97: {
             //     input: 5300,
-            //     output: 2290
+            //     output: 2297
             // },
             // p98: {
             //     input: 5310,
@@ -619,21 +654,27 @@
 
                 const judgeInputCost = parseFloat(judgeModel.prompt);
                 const judgeOutputCost = parseFloat(judgeModel.completion);
-                const judgeInputCacheRead = judgeModel.inputCacheRead ? parseFloat(judgeModel.inputCacheRead) : null;
-                const judgeInputCacheWrite = judgeModel.inputCacheWrite ? parseFloat(judgeModel.inputCacheWrite) : null;
+
+                // Check if we should ignore Anthropic cache for judge
+                const ignoreAnthropicCache = document.getElementById('ignoreAnthropicCache').checked;
+                const isAnthropicJudge = judgeModelId.startsWith('anthropic/');
+
+                const judgeInputCacheRead = (judgeModel.inputCacheRead && !(ignoreAnthropicCache && isAnthropicJudge)) ? parseFloat(judgeModel.inputCacheRead) : null;
+                const judgeInputCacheWrite = (judgeModel.inputCacheWrite && !(ignoreAnthropicCache && isAnthropicJudge)) ? parseFloat(judgeModel.inputCacheWrite) : null;
 
                 // Calculate judge costs once
                 const judgeInputTokens = STATS.judge.inputTokens;
                 const judgeOutputTokens = STATS.judge.outputTokens;
-                const judgeCachedTokens = STATS.judge.cachedTokens;
-                const judgeUncachedTokens = judgeInputTokens - judgeCachedTokens;
+                const judgeCachedTokensRead = STATS.judge.cachedTokensOverall;
+                const judgeCachedTokensWrite = STATS.judge.cachedTokensConditional;
+                const judgeUncachedTokens = judgeInputTokens - judgeCachedTokensRead;
 
                 const judgeNoCachePerAttempt = (judgeInputTokens * judgeInputCost) + (judgeOutputTokens * judgeOutputCost);
 
                 let judgePerAttemptWithCache = judgeNoCachePerAttempt;
                 if (judgeInputCacheRead || judgeInputCacheWrite) {
                     const judgeInputCost_uncached = judgeUncachedTokens * judgeInputCost;
-                    const judgeInputCost_cached = judgeCachedTokens * (judgeInputCacheRead || judgeInputCost);
+                    const judgeInputCost_cached = judgeCachedTokensRead * (judgeInputCacheRead || judgeInputCost);
                     const judgeOutputCostCalc = judgeOutputTokens * judgeOutputCost;
                     judgePerAttemptWithCache = judgeInputCost_uncached + judgeInputCost_cached + judgeOutputCostCalc;
                 }
@@ -649,21 +690,27 @@
                         };
                     }
 
-                    const modelCachedTokens = STATS.model.cachedTokens;
-                    const modelUncachedTokens = values.input - modelCachedTokens;
+                    const modelCachedTokensRead = STATS.model.cachedTokensOverall;
+                    const modelCachedTokensWrite = STATS.model.cachedTokensConditional;
+                    const modelUncachedTokens = values.input - modelCachedTokensRead;
 
                     selectedModels.forEach(modelId => {
                         const model = MODEL_PRICING[modelId];
                         const inputCostPerToken = parseFloat(model.prompt);
                         const outputCostPerToken = parseFloat(model.completion);
-                        const inputCacheRead = model.inputCacheRead ? parseFloat(model.inputCacheRead) : null;
-                        const inputCacheWrite = model.inputCacheWrite ? parseFloat(model.inputCacheWrite) : null;
+
+                        // Check if we should ignore Anthropic cache
+                        const ignoreAnthropicCache = document.getElementById('ignoreAnthropicCache').checked;
+                        const isAnthropicModel = modelId.startsWith('anthropic/');
+
+                        const inputCacheRead = (model.inputCacheRead && !(ignoreAnthropicCache && isAnthropicModel)) ? parseFloat(model.inputCacheRead) : null;
+                        const inputCacheWrite = (model.inputCacheWrite && !(ignoreAnthropicCache && isAnthropicModel)) ? parseFloat(model.inputCacheWrite) : null;
 
                         // NO CACHE
                         const modelNoCachePerAttempt = (values.input * inputCostPerToken) + (values.output * outputCostPerToken);
                         const modelNoCachePerRequest = (modelNoCachePerAttempt + judgeNoCachePerAttempt) * timesToSample;
                         const modelNoCache = modelNoCachePerRequest * numRequests;
-                        
+
                         modelCosts[percentile].noCache.byModel[modelId] = {
                             name: model.name,
                             modelCost: modelNoCachePerAttempt * timesToSample * numRequests,
@@ -679,14 +726,14 @@
                         if (inputCacheWrite || inputCacheRead) {
                             if (inputCacheWrite) {
                                 const modelFirstInputCost = values.input * inputCostPerToken;
-                                const modelFirstCacheWriteCost = modelCachedTokens * inputCacheWrite;
+                                const modelFirstCacheWriteCost = modelCachedTokensWrite * inputCacheWrite;
                                 const modelFirstOutputCost = values.output * outputCostPerToken;
                                 modelFirstAttempt = modelFirstInputCost + modelFirstCacheWriteCost + modelFirstOutputCost;
                             }
 
                             if (inputCacheRead) {
                                 const modelLaterInputCost = modelUncachedTokens * inputCostPerToken;
-                                const modelLaterCacheCost = modelCachedTokens * inputCacheRead;
+                                const modelLaterCacheCost = modelCachedTokensRead * inputCacheRead;
                                 const modelLaterOutputCost = values.output * outputCostPerToken;
                                 modelLaterAttempt = modelLaterInputCost + modelLaterCacheCost + modelLaterOutputCost;
                             }
@@ -732,13 +779,22 @@
 
                 const inputCostPerToken = parseFloat(model.prompt);
                 const outputCostPerToken = parseFloat(model.completion);
-                const inputCacheRead = model.inputCacheRead ? parseFloat(model.inputCacheRead) : null;
-                const inputCacheWrite = model.inputCacheWrite ? parseFloat(model.inputCacheWrite) : null;
+
+                // Check if we should ignore Anthropic cache
+                const ignoreAnthropicCache = document.getElementById('ignoreAnthropicCache').checked;
+                const isAnthropicModel = modelId.startsWith('anthropic/');
+
+                const inputCacheRead = (model.inputCacheRead && !(ignoreAnthropicCache && isAnthropicModel)) ? parseFloat(model.inputCacheRead) : null;
+                const inputCacheWrite = (model.inputCacheWrite && !(ignoreAnthropicCache && isAnthropicModel)) ? parseFloat(model.inputCacheWrite) : null;
 
                 const judgeInputCost = parseFloat(judgeModel.prompt);
                 const judgeOutputCost = parseFloat(judgeModel.completion);
-                const judgeInputCacheRead = judgeModel.inputCacheRead ? parseFloat(judgeModel.inputCacheRead) : null;
-                const judgeInputCacheWrite = judgeModel.inputCacheWrite ? parseFloat(judgeModel.inputCacheWrite) : null;
+
+                // Check if we should ignore Anthropic cache for judge (reuse same flag)
+                const isAnthropicJudge = judgeModelId.startsWith('anthropic/');
+
+                const judgeInputCacheRead = (judgeModel.inputCacheRead && !(ignoreAnthropicCache && isAnthropicJudge)) ? parseFloat(judgeModel.inputCacheRead) : null;
+                const judgeInputCacheWrite = (judgeModel.inputCacheWrite && !(ignoreAnthropicCache && isAnthropicJudge)) ? parseFloat(judgeModel.inputCacheWrite) : null;
 
                 calculateCost(
                     inputCostPerToken,
@@ -759,11 +815,13 @@
         function calculateManual() {
             const inputCostPer1M = parseFloat(document.getElementById('inputCost').value);
             const outputCostPer1M = parseFloat(document.getElementById('outputCost').value);
+            const inputCacheReadPer1M = parseFloat(document.getElementById('inputCacheReadCost').value);
+            const inputCacheWritePer1M = parseFloat(document.getElementById('inputCacheWriteCost').value);
             const judgeModelId = document.getElementById('judgeModelId').value.trim();
             const resultDiv = document.getElementById('result');
 
             if (isNaN(inputCostPer1M) || isNaN(outputCostPer1M)) {
-                resultDiv.innerHTML = '<div class="error">Please enter valid numbers for both costs</div>';
+                resultDiv.innerHTML = '<div class="error">Please enter valid numbers for input and output costs</div>';
                 return;
             }
 
@@ -780,6 +838,8 @@
 
             const inputCostPerToken = inputCostPer1M / 1_000_000;
             const outputCostPerToken = outputCostPer1M / 1_000_000;
+            const inputCacheRead = !isNaN(inputCacheReadPer1M) ? inputCacheReadPer1M / 1_000_000 : null;
+            const inputCacheWrite = !isNaN(inputCacheWritePer1M) ? inputCacheWritePer1M / 1_000_000 : null;
 
             const judgeInputCost = parseFloat(judgeModel.prompt);
             const judgeOutputCost = parseFloat(judgeModel.completion);
@@ -789,8 +849,8 @@
             calculateCost(
                 inputCostPerToken,
                 outputCostPerToken,
-                null, // no cache pricing for manual input
-                null,
+                inputCacheRead,
+                inputCacheWrite,
                 judgeInputCost,
                 judgeOutputCost,
                 judgeInputCacheRead,
@@ -838,16 +898,18 @@
                 ${judgeInputCacheWrite ? ` | Cache Write: $${(judgeInputCacheWrite * 1_000_000).toFixed(2)}/1M` : ''}
             </div>`;
 
-            // Calculate judge costs (using fixed conservative mean)
+            // Calculate judge costs
             const judgeInputTokens = STATS.judge.inputTokens;
             const judgeOutputTokens = STATS.judge.outputTokens;
-            const judgeCachedTokens = STATS.judge.cachedTokens;
-            const judgeUncachedTokens = judgeInputTokens - judgeCachedTokens;
+            const judgeCachedTokensRead = STATS.judge.cachedTokensOverall;  // conservative for reads
+            const judgeCachedTokensWrite = STATS.judge.cachedTokensConditional;  // actual write amount
+            const judgeUncachedTokens = judgeInputTokens - judgeCachedTokensRead;
 
-            // Calculate for all percentiles (using fixed conservative mean for cache)
+            // Calculate for all percentiles
             Object.entries(PERCENTILE_VALUES).forEach(([percentile, values]) => {
-                const modelCachedTokens = STATS.model.cachedTokens;
-                const modelUncachedTokens = values.input - modelCachedTokens;
+                const modelCachedTokensRead = STATS.model.cachedTokensOverall;  // conservative for reads
+                const modelCachedTokensWrite = STATS.model.cachedTokensConditional;  // actual write amount
+                const modelUncachedTokens = values.input - modelCachedTokensRead;
 
                 // === NO CACHE CALCULATION (BASELINE) ===
                 const modelNoCachePerAttempt = (values.input * inputCostPerToken) + (values.output * outputCostPerToken);
@@ -868,10 +930,10 @@
                 if (inputCacheRead || inputCacheWrite || judgeInputCacheRead || judgeInputCacheWrite) {
                     hasCache = true;
 
-                    // MODEL RESPONSE - First attempt
+                    // MODEL RESPONSE - First attempt (cache write)
                     if (inputCacheWrite) {
                         const modelFirstInputCost = values.input * inputCostPerToken;
-                        const modelFirstCacheWriteCost = modelCachedTokens * inputCacheWrite;
+                        const modelFirstCacheWriteCost = modelCachedTokensWrite * inputCacheWrite;  // Use conditional mean
                         const modelFirstOutputCost = values.output * outputCostPerToken;
                         modelFirstAttempt = modelFirstInputCost + modelFirstCacheWriteCost + modelFirstOutputCost;
                     }
@@ -879,7 +941,7 @@
                     // MODEL RESPONSE - Later attempts (cache read)
                     if (inputCacheRead) {
                         const modelLaterInputCost = modelUncachedTokens * inputCostPerToken;
-                        const modelLaterCacheCost = modelCachedTokens * inputCacheRead;
+                        const modelLaterCacheCost = modelCachedTokensRead * inputCacheRead;  // Use overall mean (conservative)
                         const modelLaterOutputCost = values.output * outputCostPerToken;
                         modelLaterAttempt = modelLaterInputCost + modelLaterCacheCost + modelLaterOutputCost;
                     }
@@ -890,7 +952,7 @@
                     let judgePerAttemptWithCache = judgeNoCachePerAttempt;
                     if (judgeInputCacheRead || judgeInputCacheWrite) {
                         const judgeInputCost_uncached = judgeUncachedTokens * judgeInputCost;
-                        const judgeInputCost_cached = judgeCachedTokens * (judgeInputCacheRead || judgeInputCost);
+                        const judgeInputCost_cached = judgeCachedTokensRead * (judgeInputCacheRead || judgeInputCost);
                         const judgeOutputCostCalc = judgeOutputTokens * judgeOutputCost;
                         judgePerAttemptWithCache = judgeInputCost_uncached + judgeInputCost_cached + judgeOutputCostCalc;
                     }
@@ -929,9 +991,9 @@
                     breakdownWithCache += `<span style="font-size: 9px;">First attempt:</span><br>`;
                     breakdownWithCache += `- Input: ${values.input.toLocaleString()}t × $${(inputCostPerToken * 1_000_000).toFixed(2)}/1M = $${(values.input * inputCostPerToken).toFixed(4)}<br>`;
                     if (inputCacheWrite) {
-                        breakdownWithCache += `- Cache write: ${modelCachedTokens.toLocaleString()}t × $${(inputCacheWrite * 1_000_000).toFixed(2)}/1M = $${(modelCachedTokens * inputCacheWrite).toFixed(4)}<br>`;
+                        breakdownWithCache += `- Cache write: ${modelCachedTokensWrite.toLocaleString()}t × $${(inputCacheWrite * 1_000_000).toFixed(2)}/1M = $${(modelCachedTokensWrite * inputCacheWrite).toFixed(4)}<br>`;
                     } else if (inputCacheRead) {
-                        breakdownWithCache += `- Cache write: ${modelCachedTokens.toLocaleString()}t × $0.00/1M = $0.0000 (free)<br>`;
+                        breakdownWithCache += `- Cache write: ${modelCachedTokensWrite.toLocaleString()}t × $0.00/1M = $0.0000 (free)<br>`;
                     }
                     breakdownWithCache += `- Output: ${values.output.toLocaleString()}t × $${(outputCostPerToken * 1_000_000).toFixed(2)}/1M = $${(values.output * outputCostPerToken).toFixed(4)}<br>`;
                     breakdownWithCache += `= $${modelFirstAttempt.toFixed(4)}<br>`;
@@ -940,7 +1002,7 @@
                         breakdownWithCache += `<span style="font-size: 9px;">Later attempts (×${timesToSample - 1}):</span><br>`;
                         if (inputCacheRead) {
                             breakdownWithCache += `- Uncached: ${modelUncachedTokens.toLocaleString()}t × $${(inputCostPerToken * 1_000_000).toFixed(2)}/1M = $${(modelUncachedTokens * inputCostPerToken).toFixed(4)}<br>`;
-                            breakdownWithCache += `- Cache read: ${modelCachedTokens.toLocaleString()}t × $${(inputCacheRead * 1_000_000).toFixed(2)}/1M = $${(modelCachedTokens * inputCacheRead).toFixed(4)}<br>`;
+                            breakdownWithCache += `- Cache read: ${modelCachedTokensRead.toLocaleString()}t × $${(inputCacheRead * 1_000_000).toFixed(2)}/1M = $${(modelCachedTokensRead * inputCacheRead).toFixed(4)}<br>`;
                         } else {
                             breakdownWithCache += `- Input: ${values.input.toLocaleString()}t × $${(inputCostPerToken * 1_000_000).toFixed(2)}/1M = $${(values.input * inputCostPerToken).toFixed(4)}<br>`;
                         }
@@ -953,7 +1015,7 @@
                         // Judge has cache read support - show cached breakdown
                         breakdownWithCache += `<span style="font-size: 9px;">All attempts (×${timesToSample}${numModels > 1 ? ` × ${numModels} models` : ''}):</span><br>`;
                         breakdownWithCache += `- Uncached: ${judgeUncachedTokens.toLocaleString()}t × $${(judgeInputCost * 1_000_000).toFixed(2)}/1M = $${(judgeUncachedTokens * judgeInputCost).toFixed(4)}<br>`;
-                        breakdownWithCache += `- Cached (avg): ${judgeCachedTokens.toLocaleString()}t × $${(judgeInputCacheRead * 1_000_000).toFixed(2)}/1M = $${(judgeCachedTokens * judgeInputCacheRead).toFixed(4)}<br>`;
+                        breakdownWithCache += `- Cached (avg): ${judgeCachedTokensRead.toLocaleString()}t × $${(judgeInputCacheRead * 1_000_000).toFixed(2)}/1M = $${(judgeCachedTokensRead * judgeInputCacheRead).toFixed(4)}<br>`;
                         breakdownWithCache += `- Output: ${judgeOutputTokens.toLocaleString()}t × $${(judgeOutputCost * 1_000_000).toFixed(2)}/1M = $${(judgeOutputTokens * judgeOutputCost).toFixed(4)}<br>`;
                         breakdownWithCache += `= $${judgeFirstAttempt.toFixed(4)} × ${timesToSample}${numModels > 1 ? ` × ${numModels}` : ''}<br>`;
                     } else {
@@ -1008,27 +1070,18 @@
                 </div>`;
             }
 
+            // Store chart data for rendering after DOM update
+            const chartsToRender = [];
+
             // Calculate for all percentiles
             Object.entries(PERCENTILE_VALUES).forEach(([percentile, values]) => {
                 const costs = modelCosts[percentile];
                 const noCacheTotalCost = costs.noCache.total;
                 const withCacheTotalCost = costs.withCache.total;
-                const hasCache = Object.values(costs.withCache.byModel).some(m => 
-                    costs.withCache.byModel[Object.keys(costs.withCache.byModel)[0]].total !== 
-                    costs.noCache.byModel[Object.keys(costs.noCache.byModel)[0]].total
-                );
+                const hasCache = withCacheTotalCost !== noCacheTotalCost;
 
                 const savings = noCacheTotalCost - withCacheTotalCost;
                 const savingsPercent = hasCache ? ((savings / noCacheTotalCost) * 100) : 0;
-
-                // Build pie chart canvas
-                const chartId = `chart_${percentile}`;
-                const chartHtml = hasCache ? `
-                    <div style="margin-top: 15px; padding: 10px; background: #fafafa; border: 1px solid #ddd;">
-                        <div style="font-size: 11px; font-weight: 600; margin-bottom: 8px; text-align: center;">Cost Breakdown (WITH CACHE)</div>
-                        <canvas id="${chartId}" width="250" height="250"></canvas>
-                    </div>
-                ` : '';
 
                 // Build detailed breakdown
                 let breakdownHtml = `<strong style="color: #666;">WITHOUT CACHE:</strong><br>`;
@@ -1070,70 +1123,133 @@
                         <div class="result-breakdown">
                             ${breakdownHtml}
                         </div>
-                        ${chartHtml}
                     </div>
                 `;
 
-                // Draw pie chart after rendering
+                // Store chart data for later rendering
                 if (hasCache) {
-                    setTimeout(() => {
-                        const ctx = document.getElementById(chartId);
-                        if (ctx) {
-                            const chartData = [];
-                            const chartLabels = [];
-                            const chartColors = [
-                                '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
-                                '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384'
-                            ];
+                    const chartId = `chart_${percentile}`;
+                    chartsToRender.push({
+                        chartId,
+                        percentile: percentile.toUpperCase(),
+                        costsData: JSON.parse(JSON.stringify(costs.withCache.byModel))  // Deep copy
+                    });
+                }
+            });
 
-                            Object.entries(costs.withCache.byModel).forEach(([modelId, data], idx) => {
-                                chartLabels.push(`${data.name} (Model)`);
-                                chartData.push(data.modelCost);
-                                chartLabels.push(`${data.name} (Judge)`);
-                                chartData.push(data.judgeCost);
-                            });
+            // Build charts section HTML
+            let chartsHtml = '';
+            if (chartsToRender.length > 0) {
+                chartsHtml = `
+                    <div style="margin-top: 30px; padding: 20px; background: #fafafa; border: 1px solid #ddd; border-radius: 4px;">
+                        <h3 style="margin: 0 0 20px 0; font-size: 16px; text-align: center;">Cost Breakdown Charts (WITH CACHE)</h3>
+                        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(450px, 1fr)); gap: 20px;">
+                            ${chartsToRender.map(chart => `
+                                <div style="padding: 15px; background: white; border: 1px solid #ccc; border-radius: 4px;">
+                                    <div style="font-size: 13px; font-weight: 600; margin-bottom: 10px; text-align: center;">${chart.percentile}</div>
+                                    <div style="position: relative; height: 450px;">
+                                        <canvas id="${chart.chartId}"></canvas>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
 
-                            new Chart(ctx, {
-                                type: 'pie',
-                                data: {
-                                    labels: chartLabels,
-                                    datasets: [{
-                                        data: chartData,
-                                        backgroundColor: chartColors,
-                                        borderWidth: 1
-                                    }]
-                                },
-                                options: {
-                                    responsive: true,
-                                    maintainAspectRatio: true,
-                                    plugins: {
-                                        legend: {
-                                            position: 'bottom',
-                                            labels: {
-                                                font: { size: 9 },
-                                                padding: 8
-                                            }
-                                        },
-                                        tooltip: {
-                                            callbacks: {
-                                                label: function(context) {
-                                                    const label = context.label || '';
-                                                    const value = context.parsed || 0;
-                                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
-                                                    const percentage = ((value / total) * 100).toFixed(1);
-                                                    return `${label}: $${value.toFixed(4)} (${percentage}%)`;
+                        <div style="margin-top: 30px;">
+                            <h3 style="margin: 0 0 20px 0; font-size: 16px; text-align: center;">Cumulative Cost Analysis (Cheapest to Most Expensive)</h3>
+                            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(500px, 1fr)); gap: 20px;">
+                                ${chartsToRender.map(chart => `
+                                    <div style="padding: 15px; background: white; border: 1px solid #ccc; border-radius: 4px;">
+                                        <div style="font-size: 13px; font-weight: 600; margin-bottom: 10px; text-align: center;">${chart.percentile}</div>
+                                        <div style="position: relative; height: 400px;">
+                                            <canvas id="${chart.chartId}_cumulative"></canvas>
+                                        </div>
+                                    </div>
+                                `).join('')}
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            // Set HTML first
+            resultDiv.innerHTML = headerHtml + '<div class="results-grid">' + gridHtml + '</div>' + chartsHtml;
+
+            // Render all charts after DOM is updated
+            setTimeout(() => {
+                chartsToRender.forEach(chartInfo => {
+                    const ctx = document.getElementById(chartInfo.chartId);
+                    if (ctx) {
+                        const chartColors = [
+                            '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+                            '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384'
+                        ];
+
+                        // Sort by total cost (descending)
+                        const sortedEntries = Object.entries(chartInfo.costsData)
+                            .map(([modelId, data]) => ({
+                                modelId,
+                                name: data.name,
+                                modelCost: data.modelCost,
+                                judgeCost: data.judgeCost,
+                                total: data.modelCost + data.judgeCost
+                            }))
+                            .sort((a, b) => b.total - a.total);
+
+                        const chartData = sortedEntries.map(entry => entry.total);
+                        const chartLabels = sortedEntries.map(entry => entry.name);
+                        const sortedCostsData = sortedEntries.map(entry => ({
+                            modelCost: entry.modelCost,
+                            judgeCost: entry.judgeCost
+                        }));
+
+                        new Chart(ctx, {
+                            type: 'pie',
+                            data: {
+                                labels: chartLabels,
+                                datasets: [{
+                                    data: chartData,
+                                    backgroundColor: chartColors,
+                                    borderWidth: 1
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: true,
+                                plugins: {
+                                    legend: {
+                                        position: 'bottom',
+                                        labels: {
+                                            font: { size: 9 },
+                                            padding: 8
+                                        }
+                                    },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: function(context) {
+                                                const label = context.label || '';
+                                                const value = context.parsed || 0;
+                                                const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                                const percentage = ((value / total) * 100).toFixed(1);
+
+                                                // Find the model data to show breakdown
+                                                const modelData = sortedCostsData[context.dataIndex];
+                                                if (modelData) {
+                                                    return [
+                                                        `${label}: $${value.toFixed(4)} (${percentage}%)`,
+                                                        `  Model: $${modelData.modelCost.toFixed(4)}`,
+                                                        `  Judge: $${modelData.judgeCost.toFixed(4)}`
+                                                    ];
                                                 }
+                                                return `${label}: $${value.toFixed(4)} (${percentage}%)`;
                                             }
                                         }
                                     }
                                 }
-                            });
-                        }
-                    }, 100);
-                }
-            });
-
-            resultDiv.innerHTML = headerHtml + '<div class="results-grid">' + gridHtml + '</div>';
+                            }
+                        });
+                    }
+                });
+            }, 100);
         }
 
         // Allow Enter key to trigger fetch

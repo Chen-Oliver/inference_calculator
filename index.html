@@ -4,6 +4,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Inference Cost Calculator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1"></script>
     <style>
         * {
             margin: 0;
@@ -607,61 +608,111 @@
             }
 
             if (isMulti) {
-                // Multi-model mode: sum costs of all selected models
+                // Multi-model mode: calculate each model separately then sum costs
                 if (selectedModels.length === 0) {
                     resultDiv.innerHTML = '<div class="error">Please add at least one model</div>';
                     return;
                 }
 
-                // Sum up costs for all models
-                let totalInputCost = 0;
-                let totalOutputCost = 0;
-                let totalInputCacheRead = 0;
-                let totalInputCacheWrite = 0;
-                let hasAnyCacheRead = false;
-                let hasAnyCacheWrite = false;
-
-                const modelNames = [];
-
-                for (const modelId of selectedModels) {
-                    const model = MODEL_PRICING[modelId];
-                    totalInputCost += parseFloat(model.prompt);
-                    totalOutputCost += parseFloat(model.completion);
-
-                    if (model.inputCacheRead) {
-                        totalInputCacheRead += parseFloat(model.inputCacheRead);
-                        hasAnyCacheRead = true;
-                    } else {
-                        totalInputCacheRead += parseFloat(model.prompt);
-                    }
-
-                    if (model.inputCacheWrite) {
-                        totalInputCacheWrite += parseFloat(model.inputCacheWrite);
-                        hasAnyCacheWrite = true;
-                    } else {
-                        totalInputCacheWrite += parseFloat(model.prompt);
-                    }
-
-                    modelNames.push(model.name);
-                }
+                const numRequests = parseInt(document.getElementById('numRequests').value) || 1;
+                const timesToSample = parseInt(document.getElementById('timesToSample').value) || 1;
 
                 const judgeInputCost = parseFloat(judgeModel.prompt);
                 const judgeOutputCost = parseFloat(judgeModel.completion);
                 const judgeInputCacheRead = judgeModel.inputCacheRead ? parseFloat(judgeModel.inputCacheRead) : null;
                 const judgeInputCacheWrite = judgeModel.inputCacheWrite ? parseFloat(judgeModel.inputCacheWrite) : null;
 
-                calculateCost(
-                    totalInputCost,
-                    totalOutputCost,
-                    hasAnyCacheRead ? totalInputCacheRead : null,
-                    hasAnyCacheWrite ? totalInputCacheWrite : null,
-                    judgeInputCost,
-                    judgeOutputCost,
-                    judgeInputCacheRead,
-                    judgeInputCacheWrite,
+                // Calculate judge costs once
+                const judgeInputTokens = STATS.judge.inputTokens;
+                const judgeOutputTokens = STATS.judge.outputTokens;
+                const judgeCachedTokens = STATS.judge.cachedTokens;
+                const judgeUncachedTokens = judgeInputTokens - judgeCachedTokens;
+
+                const judgeNoCachePerAttempt = (judgeInputTokens * judgeInputCost) + (judgeOutputTokens * judgeOutputCost);
+
+                let judgePerAttemptWithCache = judgeNoCachePerAttempt;
+                if (judgeInputCacheRead || judgeInputCacheWrite) {
+                    const judgeInputCost_uncached = judgeUncachedTokens * judgeInputCost;
+                    const judgeInputCost_cached = judgeCachedTokens * (judgeInputCacheRead || judgeInputCost);
+                    const judgeOutputCostCalc = judgeOutputTokens * judgeOutputCost;
+                    judgePerAttemptWithCache = judgeInputCost_uncached + judgeInputCost_cached + judgeOutputCostCalc;
+                }
+
+                // Calculate each model separately
+                const modelCosts = {};
+                
+                Object.entries(PERCENTILE_VALUES).forEach(([percentile, values]) => {
+                    if (!modelCosts[percentile]) {
+                        modelCosts[percentile] = {
+                            noCache: { total: 0, byModel: {} },
+                            withCache: { total: 0, byModel: {} }
+                        };
+                    }
+
+                    const modelCachedTokens = STATS.model.cachedTokens;
+                    const modelUncachedTokens = values.input - modelCachedTokens;
+
+                    selectedModels.forEach(modelId => {
+                        const model = MODEL_PRICING[modelId];
+                        const inputCostPerToken = parseFloat(model.prompt);
+                        const outputCostPerToken = parseFloat(model.completion);
+                        const inputCacheRead = model.inputCacheRead ? parseFloat(model.inputCacheRead) : null;
+                        const inputCacheWrite = model.inputCacheWrite ? parseFloat(model.inputCacheWrite) : null;
+
+                        // NO CACHE
+                        const modelNoCachePerAttempt = (values.input * inputCostPerToken) + (values.output * outputCostPerToken);
+                        const modelNoCachePerRequest = (modelNoCachePerAttempt + judgeNoCachePerAttempt) * timesToSample;
+                        const modelNoCache = modelNoCachePerRequest * numRequests;
+                        
+                        modelCosts[percentile].noCache.byModel[modelId] = {
+                            name: model.name,
+                            modelCost: modelNoCachePerAttempt * timesToSample * numRequests,
+                            judgeCost: judgeNoCachePerAttempt * timesToSample * numRequests,
+                            total: modelNoCache
+                        };
+                        modelCosts[percentile].noCache.total += modelNoCache;
+
+                        // WITH CACHE
+                        let modelFirstAttempt = modelNoCachePerAttempt;
+                        let modelLaterAttempt = modelNoCachePerAttempt;
+
+                        if (inputCacheWrite || inputCacheRead) {
+                            if (inputCacheWrite) {
+                                const modelFirstInputCost = values.input * inputCostPerToken;
+                                const modelFirstCacheWriteCost = modelCachedTokens * inputCacheWrite;
+                                const modelFirstOutputCost = values.output * outputCostPerToken;
+                                modelFirstAttempt = modelFirstInputCost + modelFirstCacheWriteCost + modelFirstOutputCost;
+                            }
+
+                            if (inputCacheRead) {
+                                const modelLaterInputCost = modelUncachedTokens * inputCostPerToken;
+                                const modelLaterCacheCost = modelCachedTokens * inputCacheRead;
+                                const modelLaterOutputCost = values.output * outputCostPerToken;
+                                modelLaterAttempt = modelLaterInputCost + modelLaterCacheCost + modelLaterOutputCost;
+                            }
+                        }
+
+                        const firstAttemptTotal = modelFirstAttempt + judgePerAttemptWithCache;
+                        const laterAttemptsTotal = (timesToSample - 1) * (modelLaterAttempt + judgePerAttemptWithCache);
+                        const modelWithCachePerRequest = firstAttemptTotal + laterAttemptsTotal;
+                        const modelWithCache = modelWithCachePerRequest * numRequests;
+
+                        modelCosts[percentile].withCache.byModel[modelId] = {
+                            name: model.name,
+                            modelCost: (modelFirstAttempt + (timesToSample - 1) * modelLaterAttempt) * numRequests,
+                            judgeCost: judgePerAttemptWithCache * timesToSample * numRequests,
+                            total: modelWithCache
+                        };
+                        modelCosts[percentile].withCache.total += modelWithCache;
+                    });
+                });
+
+                const modelNames = selectedModels.map(id => MODEL_PRICING[id].name);
+
+                calculateCostMultiModel(
+                    modelCosts,
                     `Multiple Models (${selectedModels.length}): ${modelNames.join(', ')}`,
-                    judgeModel.name,
-                    selectedModels.length  // Pass number of models for judge cost multiplication
+                    judgeModel.name
                 );
             } else {
                 // Single model mode
@@ -940,6 +991,146 @@
                         </div>
                     </div>
                 `;
+            });
+
+            resultDiv.innerHTML = headerHtml + '<div class="results-grid">' + gridHtml + '</div>';
+        }
+
+        function calculateCostMultiModel(modelCosts, modelName, judgeModelName) {
+            const resultDiv = document.getElementById('result');
+            let headerHtml = '';
+            let gridHtml = '';
+
+            // Add header info
+            if (modelName && judgeModelName) {
+                headerHtml += `<div style="font-size: 12px; color: #666; margin-bottom: 10px; padding-bottom: 8px; border-bottom: 1px solid #000;">
+                    <strong>Model:</strong> ${modelName} | <strong>Judge:</strong> ${judgeModelName}
+                </div>`;
+            }
+
+            // Calculate for all percentiles
+            Object.entries(PERCENTILE_VALUES).forEach(([percentile, values]) => {
+                const costs = modelCosts[percentile];
+                const noCacheTotalCost = costs.noCache.total;
+                const withCacheTotalCost = costs.withCache.total;
+                const hasCache = Object.values(costs.withCache.byModel).some(m => 
+                    costs.withCache.byModel[Object.keys(costs.withCache.byModel)[0]].total !== 
+                    costs.noCache.byModel[Object.keys(costs.noCache.byModel)[0]].total
+                );
+
+                const savings = noCacheTotalCost - withCacheTotalCost;
+                const savingsPercent = hasCache ? ((savings / noCacheTotalCost) * 100) : 0;
+
+                // Build pie chart canvas
+                const chartId = `chart_${percentile}`;
+                const chartHtml = hasCache ? `
+                    <div style="margin-top: 15px; padding: 10px; background: #fafafa; border: 1px solid #ddd;">
+                        <div style="font-size: 11px; font-weight: 600; margin-bottom: 8px; text-align: center;">Cost Breakdown (WITH CACHE)</div>
+                        <canvas id="${chartId}" width="250" height="250"></canvas>
+                    </div>
+                ` : '';
+
+                // Build detailed breakdown
+                let breakdownHtml = `<strong style="color: #666;">WITHOUT CACHE:</strong><br>`;
+                Object.entries(costs.noCache.byModel).forEach(([modelId, data]) => {
+                    breakdownHtml += `<strong>${data.name}:</strong><br>`;
+                    breakdownHtml += `- Model: $${data.modelCost.toFixed(4)}<br>`;
+                    breakdownHtml += `- Judge: $${data.judgeCost.toFixed(4)}<br>`;
+                    breakdownHtml += `= $${data.total.toFixed(4)}<br>`;
+                });
+                breakdownHtml += `<strong>Total: $${noCacheTotalCost.toFixed(2)}</strong>`;
+
+                if (hasCache) {
+                    breakdownHtml += `<br><br><strong style="color: #000;">WITH CACHE:</strong><br>`;
+                    Object.entries(costs.withCache.byModel).forEach(([modelId, data]) => {
+                        breakdownHtml += `<strong>${data.name}:</strong><br>`;
+                        breakdownHtml += `- Model: $${data.modelCost.toFixed(4)}<br>`;
+                        breakdownHtml += `- Judge: $${data.judgeCost.toFixed(4)}<br>`;
+                        breakdownHtml += `= $${data.total.toFixed(4)}<br>`;
+                    });
+                    breakdownHtml += `<strong>Total: $${withCacheTotalCost.toFixed(2)}</strong>`;
+                }
+
+                gridHtml += `
+                    <div class="result">
+                        <div class="result-label">${percentile.toUpperCase()}</div>
+                        <div class="result-value" style="font-size: 18px; margin-bottom: 5px;">
+                            <div style="color: #666; font-size: 10px; font-weight: normal; margin-bottom: 3px;">WITHOUT CACHE</div>
+                            $${noCacheTotalCost.toFixed(2)}
+                        </div>
+                        ${hasCache ? `
+                            <div class="result-value" style="font-size: 18px; margin-bottom: 5px;">
+                                <div style="color: #666; font-size: 10px; font-weight: normal; margin-bottom: 3px;">WITH CACHE</div>
+                                $${withCacheTotalCost.toFixed(2)}
+                            </div>
+                            <div style="font-size: 11px; color: #000; margin-bottom: 8px; padding: 4px; background: #f0f0f0; border: 1px solid #ccc;">
+                                <strong>Savings:</strong> $${savings.toFixed(2)} (${savingsPercent.toFixed(1)}%)
+                            </div>
+                        ` : ''}
+                        <div class="result-breakdown">
+                            ${breakdownHtml}
+                        </div>
+                        ${chartHtml}
+                    </div>
+                `;
+
+                // Draw pie chart after rendering
+                if (hasCache) {
+                    setTimeout(() => {
+                        const ctx = document.getElementById(chartId);
+                        if (ctx) {
+                            const chartData = [];
+                            const chartLabels = [];
+                            const chartColors = [
+                                '#FF6384', '#36A2EB', '#FFCE56', '#4BC0C0', '#9966FF',
+                                '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384'
+                            ];
+
+                            Object.entries(costs.withCache.byModel).forEach(([modelId, data], idx) => {
+                                chartLabels.push(`${data.name} (Model)`);
+                                chartData.push(data.modelCost);
+                                chartLabels.push(`${data.name} (Judge)`);
+                                chartData.push(data.judgeCost);
+                            });
+
+                            new Chart(ctx, {
+                                type: 'pie',
+                                data: {
+                                    labels: chartLabels,
+                                    datasets: [{
+                                        data: chartData,
+                                        backgroundColor: chartColors,
+                                        borderWidth: 1
+                                    }]
+                                },
+                                options: {
+                                    responsive: true,
+                                    maintainAspectRatio: true,
+                                    plugins: {
+                                        legend: {
+                                            position: 'bottom',
+                                            labels: {
+                                                font: { size: 9 },
+                                                padding: 8
+                                            }
+                                        },
+                                        tooltip: {
+                                            callbacks: {
+                                                label: function(context) {
+                                                    const label = context.label || '';
+                                                    const value = context.parsed || 0;
+                                                    const total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                                    const percentage = ((value / total) * 100).toFixed(1);
+                                                    return `${label}: $${value.toFixed(4)} (${percentage}%)`;
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            });
+                        }
+                    }, 100);
+                }
             });
 
             resultDiv.innerHTML = headerHtml + '<div class="results-grid">' + gridHtml + '</div>';

@@ -360,7 +360,7 @@
                 </div>
                 <div style="margin-top: 12px;">
                     <label class="label" style="display: flex; align-items: center; gap: 8px; cursor: pointer;">
-                        <input type="checkbox" id="ignoreAnthropicCache">
+                        <input type="checkbox" id="ignoreAnthropicCache" checked>
                         <span>Ignore Anthropic/Claude cache pricing (cache writes are costly and off by default)</span>
                     </label>
                 </div>
@@ -370,41 +370,23 @@
         <div class="sections-row">
             <div class="section">
                 <div class="section-title">Option 1: Select Model(s)</div>
-                <label class="label">
-                    <input type="checkbox" id="multiModelMode" onchange="toggleMultiModelMode()">
-                    Multiple models (sum costs)
-                </label>
-                <div id="singleModelInput">
-                    <label class="label">Model ID</label>
+                <label class="label">Add models</label>
+                <div style="display: flex; gap: 8px; margin-bottom: 8px;">
                     <input
                         type="text"
-                        id="modelId"
-                        placeholder="Start typing model name..."
-                        value="openai/gpt-4o"
+                        id="multiModelInput_field"
+                        placeholder="Type or paste model IDs (comma/space/newline separated)..."
                         list="modelList"
                         autocomplete="off"
-                        style="width: 100%;"
+                        style="flex: 1;"
+                        onkeypress="if(event.key==='Enter'){event.preventDefault();addModel();}"
                     >
-                    <datalist id="modelList"></datalist>
+                    <button type="button" onclick="addModel()" style="width: auto; padding: 6px 16px; margin: 0;">Add</button>
                 </div>
-                <div id="multiModelInput" style="display: none;">
-                    <label class="label">Add models</label>
-                    <div style="display: flex; gap: 8px; margin-bottom: 8px;">
-                        <input
-                            type="text"
-                            id="multiModelInput_field"
-                            placeholder="Type or paste model IDs (comma/space/newline separated)..."
-                            list="modelList"
-                            autocomplete="off"
-                            style="flex: 1;"
-                            onkeypress="if(event.key==='Enter'){event.preventDefault();addModel();}"
-                        >
-                        <button type="button" onclick="addModel()" style="width: auto; padding: 6px 16px; margin: 0;">Add</button>
-                    </div>
-                    <div id="selectedModels" class="selected-models-list">
-                        <div style="font-size: 11px; color: #666;">No models selected</div>
-                    </div>
+                <div id="selectedModels" class="selected-models-list">
+                    <div style="font-size: 11px; color: #666;">No models selected</div>
                 </div>
+                <datalist id="modelList"></datalist>
                 <button onclick="fetchPricing()" style="width: 100%; margin-top: 12px;">Calculate</button>
             </div>
 
@@ -538,15 +520,6 @@
 
         let selectedModels = [];
 
-        function toggleMultiModelMode() {
-            const isMulti = document.getElementById('multiModelMode').checked;
-            document.getElementById('singleModelInput').style.display = isMulti ? 'none' : 'block';
-            document.getElementById('multiModelInput').style.display = isMulti ? 'block' : 'none';
-            if (isMulti) {
-                updateSelectedModelsList();
-            }
-        }
-
         function addModel() {
             const input = document.getElementById('multiModelInput_field');
             const inputValue = input.value.trim();
@@ -627,7 +600,6 @@
         }
 
         function fetchPricing() {
-            const isMulti = document.getElementById('multiModelMode').checked;
             const judgeModelId = document.getElementById('judgeModelId').value.trim();
             const resultDiv = document.getElementById('result');
 
@@ -642,12 +614,10 @@
                 return;
             }
 
-            if (isMulti) {
-                // Multi-model mode: calculate each model separately then sum costs
-                if (selectedModels.length === 0) {
-                    resultDiv.innerHTML = '<div class="error">Please add at least one model</div>';
-                    return;
-                }
+            if (selectedModels.length === 0) {
+                resultDiv.innerHTML = '<div class="error">Please add at least one model</div>';
+                return;
+            }
 
                 const numRequests = parseInt(document.getElementById('numRequests').value) || 1;
                 const timesToSample = parseInt(document.getElementById('timesToSample').value) || 1;
@@ -754,62 +724,13 @@
                     });
                 });
 
-                const modelNames = selectedModels.map(id => MODEL_PRICING[id].name);
+            const modelNames = selectedModels.map(id => MODEL_PRICING[id].name);
 
-                calculateCostMultiModel(
-                    modelCosts,
-                    `Multiple Models (${selectedModels.length}): ${modelNames.join(', ')}`,
-                    judgeModel.name
-                );
-            } else {
-                // Single model mode
-                const modelId = document.getElementById('modelId').value.trim();
-
-                if (!modelId) {
-                    resultDiv.innerHTML = '<div class="error">Please enter a model ID</div>';
-                    return;
-                }
-
-                const model = MODEL_PRICING[modelId];
-
-                if (!model) {
-                    resultDiv.innerHTML = `<div class="error">Model "${modelId}" not found. Try typing to see autocomplete suggestions.</div>`;
-                    return;
-                }
-
-                const inputCostPerToken = parseFloat(model.prompt);
-                const outputCostPerToken = parseFloat(model.completion);
-
-                // Check if we should ignore Anthropic cache
-                const ignoreAnthropicCache = document.getElementById('ignoreAnthropicCache').checked;
-                const isAnthropicModel = modelId.startsWith('anthropic/');
-
-                const inputCacheRead = (model.inputCacheRead && !(ignoreAnthropicCache && isAnthropicModel)) ? parseFloat(model.inputCacheRead) : null;
-                const inputCacheWrite = (model.inputCacheWrite && !(ignoreAnthropicCache && isAnthropicModel)) ? parseFloat(model.inputCacheWrite) : null;
-
-                const judgeInputCost = parseFloat(judgeModel.prompt);
-                const judgeOutputCost = parseFloat(judgeModel.completion);
-
-                // Check if we should ignore Anthropic cache for judge (reuse same flag)
-                const isAnthropicJudge = judgeModelId.startsWith('anthropic/');
-
-                const judgeInputCacheRead = (judgeModel.inputCacheRead && !(ignoreAnthropicCache && isAnthropicJudge)) ? parseFloat(judgeModel.inputCacheRead) : null;
-                const judgeInputCacheWrite = (judgeModel.inputCacheWrite && !(ignoreAnthropicCache && isAnthropicJudge)) ? parseFloat(judgeModel.inputCacheWrite) : null;
-
-                calculateCost(
-                    inputCostPerToken,
-                    outputCostPerToken,
-                    inputCacheRead,
-                    inputCacheWrite,
-                    judgeInputCost,
-                    judgeOutputCost,
-                    judgeInputCacheRead,
-                    judgeInputCacheWrite,
-                    model.name,
-                    judgeModel.name,
-                    1  // Single model
-                );
-            }
+            calculateCostMultiModel(
+                modelCosts,
+                `Multiple Models (${selectedModels.length}): ${modelNames.join(', ')}`,
+                judgeModel.name
+            );
         }
 
         function calculateManual() {
@@ -1184,7 +1105,7 @@
                             '#FF9F40', '#FF6384', '#C9CBCF', '#4BC0C0', '#FF6384'
                         ];
 
-                        // Sort by total cost (descending)
+                        // Sort by total cost (descending) for pie chart
                         const sortedEntries = Object.entries(chartInfo.costsData)
                             .map(([modelId, data]) => ({
                                 modelId,
@@ -1202,6 +1123,7 @@
                             judgeCost: entry.judgeCost
                         }));
 
+                        // Render pie chart with better legend handling
                         new Chart(ctx, {
                             type: 'pie',
                             data: {
@@ -1214,14 +1136,17 @@
                             },
                             options: {
                                 responsive: true,
-                                maintainAspectRatio: true,
+                                maintainAspectRatio: false,
                                 plugins: {
                                     legend: {
                                         position: 'bottom',
                                         labels: {
-                                            font: { size: 9 },
-                                            padding: 8
-                                        }
+                                            font: { size: 10 },
+                                            padding: 10,
+                                            boxWidth: 15,
+                                            boxHeight: 15
+                                        },
+                                        maxHeight: 120
                                     },
                                     tooltip: {
                                         callbacks: {
@@ -1231,7 +1156,6 @@
                                                 const total = context.dataset.data.reduce((a, b) => a + b, 0);
                                                 const percentage = ((value / total) * 100).toFixed(1);
 
-                                                // Find the model data to show breakdown
                                                 const modelData = sortedCostsData[context.dataIndex];
                                                 if (modelData) {
                                                     return [
@@ -1244,21 +1168,120 @@
                                             }
                                         }
                                     }
+                                },
+                                layout: {
+                                    padding: {
+                                        top: 10,
+                                        bottom: 10
+                                    }
                                 }
                             }
                         });
+
+                        // Render cumulative cost chart
+                        const ctxCumulative = document.getElementById(`${chartInfo.chartId}_cumulative`);
+                        if (ctxCumulative) {
+                            // Sort by total cost (ascending) for cumulative chart
+                            const sortedEntriesAsc = [...sortedEntries].reverse();
+
+                            // Calculate cumulative costs
+                            const cumulativeData = [];
+                            const cumulativeLabels = [];
+                            let runningTotal = 0;
+
+                            sortedEntriesAsc.forEach((entry, index) => {
+                                runningTotal += entry.total;
+                                cumulativeData.push(runningTotal);
+                                cumulativeLabels.push(`${index + 1}: ${entry.name}`);
+                            });
+
+                            new Chart(ctxCumulative, {
+                                type: 'bar',
+                                data: {
+                                    labels: cumulativeLabels,
+                                    datasets: [{
+                                        label: 'Cumulative Cost ($)',
+                                        data: cumulativeData,
+                                        backgroundColor: 'rgba(54, 162, 235, 0.6)',
+                                        borderColor: 'rgba(54, 162, 235, 1)',
+                                        borderWidth: 2
+                                    }]
+                                },
+                                options: {
+                                    responsive: true,
+                                    maintainAspectRatio: false,
+                                    plugins: {
+                                        legend: {
+                                            display: true,
+                                            position: 'top',
+                                            labels: {
+                                                font: { size: 11 },
+                                                padding: 10
+                                            }
+                                        },
+                                        tooltip: {
+                                            callbacks: {
+                                                title: function(context) {
+                                                    return context[0].label;
+                                                },
+                                                label: function(context) {
+                                                    const modelIndex = context.dataIndex;
+                                                    const currentModel = sortedEntriesAsc[modelIndex];
+                                                    const currentCost = currentModel.total;
+                                                    const cumulativeCost = context.parsed.y;
+
+                                                    return [
+                                                        `This model: $${currentCost.toFixed(4)}`,
+                                                        `Cumulative: $${cumulativeCost.toFixed(4)}`,
+                                                        `  Model cost: $${currentModel.modelCost.toFixed(4)}`,
+                                                        `  Judge cost: $${currentModel.judgeCost.toFixed(4)}`
+                                                    ];
+                                                }
+                                            }
+                                        }
+                                    },
+                                    scales: {
+                                        y: {
+                                            beginAtZero: true,
+                                            title: {
+                                                display: true,
+                                                text: 'Cumulative Cost ($)',
+                                                font: { size: 12 }
+                                            },
+                                            ticks: {
+                                                callback: function(value) {
+                                                    return '$' + value.toFixed(2);
+                                                }
+                                            }
+                                        },
+                                        x: {
+                                            title: {
+                                                display: true,
+                                                text: 'Models Added (Cheapest → Most Expensive)',
+                                                font: { size: 12 }
+                                            },
+                                            ticks: {
+                                                font: { size: 9 },
+                                                maxRotation: 45,
+                                                minRotation: 45
+                                            }
+                                        }
+                                    },
+                                    layout: {
+                                        padding: {
+                                            top: 10,
+                                            bottom: 10
+                                        }
+                                    }
+                                }
+                            });
+                        }
                     }
                 });
             }, 100);
         }
 
         // Allow Enter key to trigger fetch
-        document.getElementById('modelId').addEventListener('keypress', function(e) {
-            if (e.key === 'Enter') {
-                fetchPricing();
-            }
-        });
-
         document.getElementById('judgeModelId').addEventListener('keypress', function(e) {
             if (e.key === 'Enter') {
                 fetchPricing();
